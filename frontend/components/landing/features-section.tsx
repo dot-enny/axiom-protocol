@@ -1,4 +1,5 @@
 import { FeatureCard } from "@/components/landing/feature-card";
+import { SnapIn } from "@/components/motion/snap-in";
 
 const FEATURES = [
   {
@@ -25,17 +26,19 @@ export function FeaturesSection() {
   return (
     <section id="how-it-works" className="border-b border-black">
       <div className="border-b border-black px-6 py-10 md:px-10">
-        <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
-          {"// 01"}
-        </p>
-        <h2 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
-          How It Works
-        </h2>
+        <SnapIn>
+          <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
+            {"// 01"}
+          </p>
+          <h2 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
+            How It Works
+          </h2>
+        </SnapIn>
       </div>
 
       <div className="flex flex-col divide-y divide-black md:flex-row md:divide-x md:divide-y-0">
-        {FEATURES.map((feature) => (
-          <FeatureCard key={feature.index} {...feature} />
+        {FEATURES.map((feature, i) => (
+          <FeatureCard key={feature.index} {...feature} delay={i * 0.06} />
         ))}
       </div>
     </section>
