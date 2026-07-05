@@ -27,7 +27,7 @@ export function Hero() {
       </SnapIn>
 
       <SnapIn delay={0.18} className="mt-12">
-        <Button href="/app" className="px-8 py-4 text-base">
+        <Button href="/dashboard" className="px-8 py-4 text-base">
           Launch App
         </Button>
       </SnapIn>
