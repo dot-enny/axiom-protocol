@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Frame } from "@/components/layout/frame";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
+import { VerificationWorkspace } from "@/components/dashboard/verification-workspace";
 
 export const metadata: Metadata = {
   title: "Dashboard — Axiom Protocol",
@@ -11,7 +12,9 @@ export default function DashboardPage() {
     <Frame>
       <div className="flex min-h-screen flex-col md:flex-row">
         <DashboardSidebar />
-        <main className="flex-1" />
+        <main className="flex-1">
+          <VerificationWorkspace />
+        </main>
       </div>
     </Frame>
   );
