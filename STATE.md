@@ -6,7 +6,7 @@ This file is the running memory for Claude across sessions. Update the
 ## Architecture
 
 Monorepo: `frontend/` (Next.js 14 App Router, TypeScript, Tailwind v3) +
-`contracts/` (empty, reserved for a future Rust/Soroban workspace).
+`contracts/` (Rust/Soroban, single `cdylib` crate — see below).
 Design system is Institutional Brutalism, defined in `.clauderules` —
 monochrome, sharp 1px borders, no gradients/soft shadows/rounded
 corners, enforced at the Tailwind config level (not just convention).
@@ -56,11 +56,56 @@ button pointed to `/app` (a Session 1 placeholder route that was
 never built). It now points to `/dashboard`, the route that actually
 exists.
 
+**Session 3 — Soroban smart contract (2026-07-06)**
+`contracts/` is now a real Rust crate (`cargo init --lib`, single
+`cdylib` package — not a multi-contract `stellar contract init`
+workspace). `soroban-sdk = "26"` (resolved 26.1.0). Release profile
+matches the current official Soroban template exactly: `opt-level =
+"z"`, `overflow-checks = true`, `panic = "abort"`, `codegen-units =
+1`, `lto = true`, `strip = "symbols"`.
+
+`src/lib.rs` implements the compliance-anchor contract:
+- `ComplianceRecord` (`#[contracttype]`): `timestamp: u64` +
+  `issuer: Address`.
+- `AxiomContract::anchor_proof(env, hash: String, issuer: Address)` —
+  requires `issuer.require_auth()`, panics if `hash` is already in
+  persistent storage (write-once, never silently overwritten),
+  otherwise stores a new `ComplianceRecord` and extends its TTL
+  (~30 day window, re-extended within ~1 day of expiry — see the
+  `DAY_IN_LEDGERS`/`TTL_EXTEND_TO`/`TTL_THRESHOLD` constants).
+- `AxiomContract::verify_proof(env, hash: String) -> Option<ComplianceRecord>` —
+  read-only lookup, `None` if never anchored (deliberately not a
+  panic, so the frontend can query speculatively).
+
+Verified by actually compiling: `stellar contract build` produces
+`target/wasm32v1-none/release/axiom_contract.wasm` (1,697 bytes),
+exporting exactly `anchor_proof` and `verify_proof`. No unit tests
+written yet (not asked for this session).
+
+Before writing any of this, the current soroban-sdk source (v26.1.0,
+fetched via `cargo fetch`) and a throwaway `stellar contract init`
+reference project were inspected directly rather than trusting
+training-data memory of the API — Soroban's SDK moves fast enough
+that this mattered. One correction it caught: the `#[contracttype]`
+doc comment claims a 10-character limit on field/type names, but the
+actual macro source (`derive_struct.rs`) enforces 30 — the doc is
+stale. `ComplianceRecord`/`timestamp`/`issuer` are fine either way,
+but this would matter for future contract work with longer names.
+
+**Known environment quirk (this machine only):** `stellar contract
+build` fails linking host build-scripts unless a real GNU mingw64
+`bin` (not the llvm-mingw one earlier in PATH) is prepended for that
+command — see `contracts/README.md`. Not fixed at the system or repo
+config level since the fix path is machine-specific; documented
+instead of baked into a fragile committed config.
+
 ## Not built yet
 
 - No real SHA-256 hashing — the dashboard's Dropzone/Terminal are UI
   simulations only, per `.clauderules`' explicit staging.
-- No Soroban contract code in `contracts/` (still empty).
+- The Soroban contract exists and compiles but is not deployed to
+  any network (no testnet/mainnet contract ID exists yet), and
+  nothing in `frontend/` calls it.
 - No real wallet connection — "Connect Wallet" is a placeholder with
   no click handler. README.md mentions `@stellar/freighter-api` /
   `@stellar/stellar-sdk` as the intended integration; neither is
@@ -68,3 +113,4 @@ exists.
 - No auth, no backend, no real on-chain calls anywhere in the app.
 - The Verification Ledger is static mock data — nothing reads from
   Soroban or any backend yet.
+- No contract unit tests yet.
