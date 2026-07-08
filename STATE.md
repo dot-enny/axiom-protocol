@@ -99,13 +99,48 @@ command — see `contracts/README.md`. Not fixed at the system or repo
 config level since the fix path is machine-specific; documented
 instead of baked into a fragile committed config.
 
+**Session 4 — Real client-side SHA-256 hashing (2026-07-07)**
+The dashboard's hashing is no longer simulated. `frontend/lib/hash.ts`
+(`sha256Hex`) reads a dropped `File` as an `ArrayBuffer` and hashes it
+with `crypto.subtle.digest("SHA-256", ...)` — the file's bytes never
+leave the browser, no server round-trip. `verification-workspace.tsx`
+now awaits this before flipping `status` to `"processing"`, so by the
+time `TerminalConsole` starts its staged log reveal, the real hash is
+already in hand; the "dramatic" `setTimeout` pacing (550ms/line) is
+purely theatrical narration of work that already finished, not a
+simulation of it. Terminal sequence is now exactly the four requested
+lines — `[SYSTEM] Intercepting...`, `[CRYPTO] Computing...`, `[CRYPTO]
+Hash generated: {realHash}`, `[NETWORK] Ready for Soroban anchor.` —
+replacing the old random-hex mock.
+
+`VerificationWorkspace` also gained an "Anchor to Soroban" `Button`
+below the Dropzone/Terminal grid, disabled until `status === "done"`
+(no click handler yet — Task 3 was explicitly UI-state only). `Button`
+itself got `disabled:` variants (`opacity-30`, `pointer-events-none`)
+since it previously had no disabled styling at all.
+
+Fixed a real inconsistency while here: Dropzone's completed state
+said "Status: Anchored", which was never true even in the old mock
+flow — hashing and anchoring are different steps, and anchoring still
+doesn't happen anywhere. Now reads "Status: Hash Ready" and shows the
+truncated hash. Extracted `truncateMiddle` out of `ledger-row.tsx`
+into `frontend/lib/format.ts` so Dropzone could reuse it instead of
+duplicating.
+
+Verified for real, not just type-checked: dropped a file with known
+content into the running dashboard via Playwright (system Chrome —
+see the Session 1/3 notes on this machine's Playwright browser-download
+issues) and compared the hash shown in the terminal against an
+independently-computed `sha256sum` of the same file. They matched
+exactly. Also confirmed the Anchor button is disabled before the drop
+and enabled only after the log sequence completes.
+
 ## Not built yet
 
-- No real SHA-256 hashing — the dashboard's Dropzone/Terminal are UI
-  simulations only, per `.clauderules`' explicit staging.
 - The Soroban contract exists and compiles but is not deployed to
   any network (no testnet/mainnet contract ID exists yet), and
-  nothing in `frontend/` calls it.
+  nothing in `frontend/` calls it. "Anchor to Soroban" is enabled but
+  has no click handler — clicking it does nothing.
 - No real wallet connection — "Connect Wallet" is a placeholder with
   no click handler. README.md mentions `@stellar/freighter-api` /
   `@stellar/stellar-sdk` as the intended integration; neither is
