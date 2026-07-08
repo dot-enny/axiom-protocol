@@ -2,15 +2,19 @@
 
 import { useRef, useState } from "react";
 import type { ChangeEvent, DragEvent } from "react";
-import type { VerificationStatus } from "@/components/dashboard/verification-workspace";
+import type {
+  VerificationStatus,
+  VerifiedFile,
+} from "@/components/dashboard/verification-workspace";
+import { truncateMiddle } from "@/lib/format";
 
 interface DropzoneProps {
   status: VerificationStatus;
-  fileName: string | null;
+  file: VerifiedFile | null;
   onFileDropped: (file: File) => void;
 }
 
-export function Dropzone({ status, fileName, onFileDropped }: DropzoneProps) {
+export function Dropzone({ status, file, onFileDropped }: DropzoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const isBusy = status !== "idle";
@@ -19,8 +23,8 @@ export function Dropzone({ status, fileName, onFileDropped }: DropzoneProps) {
     e.preventDefault();
     setIsDragOver(false);
     if (isBusy) return;
-    const file = e.dataTransfer.files?.[0];
-    if (file) onFileDropped(file);
+    const dropped = e.dataTransfer.files?.[0];
+    if (dropped) onFileDropped(dropped);
   }
 
   function handleDragOver(e: DragEvent<HTMLDivElement>) {
@@ -33,8 +37,8 @@ export function Dropzone({ status, fileName, onFileDropped }: DropzoneProps) {
   }
 
   function handleChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) onFileDropped(file);
+    const dropped = e.target.files?.[0];
+    if (dropped) onFileDropped(dropped);
   }
 
   function handleClick() {
@@ -76,16 +80,23 @@ export function Dropzone({ status, fileName, onFileDropped }: DropzoneProps) {
           <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
             Processing
           </p>
-          <p className="mt-4 max-w-xs truncate font-mono text-sm">{fileName}</p>
+          <p className="mt-4 max-w-xs truncate font-mono text-sm">
+            {file?.name}
+          </p>
         </>
       )}
 
-      {status === "done" && (
+      {status === "done" && file && (
         <>
           <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
-            Status: Anchored
+            Status: Hash Ready
           </p>
-          <p className="mt-4 max-w-xs truncate font-mono text-sm">{fileName}</p>
+          <p className="mt-4 max-w-xs truncate font-mono text-sm">
+            {file.name}
+          </p>
+          <p className="mt-2 font-mono text-xs text-slate-500">
+            {truncateMiddle(file.hash, 10, 8)}
+          </p>
         </>
       )}
     </div>

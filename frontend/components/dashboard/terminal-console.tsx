@@ -2,43 +2,39 @@
 
 import { useEffect, useState } from "react";
 import { SnapIn } from "@/components/motion/snap-in";
-import type { VerificationStatus } from "@/components/dashboard/verification-workspace";
+import type {
+  VerificationStatus,
+  VerifiedFile,
+} from "@/components/dashboard/verification-workspace";
 
 interface TerminalConsoleProps {
   status: VerificationStatus;
-  fileName: string | null;
+  file: VerifiedFile | null;
   onSequenceComplete: () => void;
 }
 
 const LINE_DELAY_MS = 550;
 
-function buildSequence(fileName: string): string[] {
-  const mockHash = Array.from({ length: 8 }, () =>
-    Math.floor(Math.random() * 16).toString(16)
-  ).join("");
-
+function buildSequence(file: VerifiedFile): string[] {
   return [
-    `[SYSTEM] Isolating ${fileName} in local memory...`,
-    "[SYSTEM] No network transmission detected. Privacy preserved.",
-    "[CRYPTO] Computing SHA-256 digest...",
-    `[CRYPTO] Digest computed: ${mockHash}...`,
-    "[SOROBAN] Preparing anchor transaction...",
-    "[SOROBAN] Awaiting wallet signature...",
-    "[SOROBAN] Proof anchored to ledger.",
+    `[SYSTEM] Intercepting local file: ${file.name} (${file.size.toLocaleString()} bytes)...`,
+    "[CRYPTO] Computing SHA-256 hash in browser sandbox...",
+    `[CRYPTO] Hash generated: ${file.hash}`,
+    "[NETWORK] Ready for Soroban anchor.",
   ];
 }
 
 export function TerminalConsole({
   status,
-  fileName,
+  file,
   onSequenceComplete,
 }: TerminalConsoleProps) {
   const [lines, setLines] = useState<string[]>([]);
 
   useEffect(() => {
-    if (status !== "processing" || !fileName) return;
+    if (status !== "processing" || !file) return;
 
-    const sequence = buildSequence(fileName);
+    const sequence = buildSequence(file);
     setLines([]);
 
     const lineTimers = sequence.map((line, i) =>
@@ -56,7 +52,7 @@ export function TerminalConsole({
       lineTimers.forEach(clearTimeout);
       clearTimeout(completeTimer);
     };
-  }, [status, fileName, onSequenceComplete]);
+  }, [status, file, onSequenceComplete]);
 
   return (
     <div className="flex min-h-[420px] flex-col border border-black bg-black font-mono text-sm text-white">
@@ -75,7 +71,7 @@ export function TerminalConsole({
         )}
         {lines.map((line, i) => (
           <SnapIn key={i}>
-            <p className="text-slate-300">
+            <p className="break-all text-slate-300">
               <span className="text-white">{"> "}</span>
               {line}
             </p>
