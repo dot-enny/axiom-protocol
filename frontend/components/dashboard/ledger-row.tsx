@@ -1,17 +1,13 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { truncateMiddle } from "@/lib/format";
 
 interface LedgerRowProps {
   hash: string;
   timestamp: string;
   issuer: string;
   delay?: number;
-}
-
-function truncateMiddle(value: string, head: number, tail: number): string {
-  if (value.length <= head + tail) return value;
-  return `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
 
 export function LedgerRow({ hash, timestamp, issuer, delay = 0 }: LedgerRowProps) {
