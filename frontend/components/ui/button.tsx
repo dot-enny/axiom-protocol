@@ -9,7 +9,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const BASE =
-  "inline-flex items-center justify-center gap-2 border border-black px-6 py-3 font-mono text-sm font-semibold uppercase tracking-widest transition-transform duration-150 ease-out shadow-brutal-sm hover:-translate-x-[2px] hover:-translate-y-[2px] hover:shadow-brutal active:translate-x-0 active:translate-y-0 active:shadow-none";
+  "inline-flex items-center justify-center gap-2 border border-black px-6 py-3 font-mono text-sm font-semibold uppercase tracking-widest transition-transform duration-150 ease-out shadow-brutal-sm hover:-translate-x-[2px] hover:-translate-y-[2px] hover:shadow-brutal active:translate-x-0 active:translate-y-0 active:shadow-none disabled:pointer-events-none disabled:opacity-30";
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary: "bg-black text-white",
