@@ -3,6 +3,7 @@ import { Frame } from "@/components/layout/frame";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { VerificationWorkspace } from "@/components/dashboard/verification-workspace";
 import { VerificationLedger } from "@/components/dashboard/verification-ledger";
+import { WalletProvider } from "@/components/dashboard/wallet-context";
 
 export const metadata: Metadata = {
   title: "Dashboard — Axiom Protocol",
@@ -10,14 +11,16 @@ export const metadata: Metadata = {
 
 export default function DashboardPage() {
   return (
-    <Frame>
-      <div className="flex min-h-screen flex-col md:flex-row">
-        <DashboardSidebar />
-        <main className="flex-1">
-          <VerificationWorkspace />
-          <VerificationLedger />
-        </main>
-      </div>
-    </Frame>
+    <WalletProvider>
+      <Frame>
+        <div className="flex min-h-screen flex-col md:flex-row">
+          <DashboardSidebar />
+          <main className="flex-1">
+            <VerificationWorkspace />
+            <VerificationLedger />
+          </main>
+        </div>
+      </Frame>
+    </WalletProvider>
   );
 }

@@ -7,6 +7,7 @@ import type {
   VerifiedFile,
 } from "@/components/dashboard/verification-workspace";
 import { truncateMiddle } from "@/lib/format";
+import { useWallet } from "@/components/dashboard/wallet-context";
 
 interface DropzoneProps {
   status: VerificationStatus;
@@ -17,6 +18,7 @@ interface DropzoneProps {
 export function Dropzone({ status, file, onFileDropped }: DropzoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { address } = useWallet();
   const isBusy = status !== "idle";
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
@@ -97,6 +99,11 @@ export function Dropzone({ status, file, onFileDropped }: DropzoneProps) {
           <p className="mt-2 font-mono text-xs text-slate-500">
             {truncateMiddle(file.hash, 10, 8)}
           </p>
+          {!address && (
+            <p className="mt-4 font-mono text-xs uppercase tracking-widest text-slate-400">
+              Connect wallet to anchor
+            </p>
+          )}
         </>
       )}
     </div>

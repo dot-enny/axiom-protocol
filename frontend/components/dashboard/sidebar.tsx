@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { WalletConnector } from "@/components/dashboard/wallet-connector";
 
 export function DashboardSidebar() {
   return (
@@ -13,9 +13,7 @@ export function DashboardSidebar() {
         </p>
       </div>
 
-      <Button className="px-4 py-2 text-xs md:mx-6 md:mb-6 md:py-3">
-        Connect Wallet
-      </Button>
+      <WalletConnector />
     </aside>
   );
 }
