@@ -11,6 +11,7 @@ interface TerminalConsoleProps {
   status: VerificationStatus;
   file: VerifiedFile | null;
   onSequenceComplete: () => void;
+  extraLines: string[];
 }
 
 const LINE_DELAY_MS = 550;
@@ -28,6 +29,7 @@ export function TerminalConsole({
   status,
   file,
   onSequenceComplete,
+  extraLines,
 }: TerminalConsoleProps) {
   const [lines, setLines] = useState<string[]>([]);
 
@@ -54,6 +56,8 @@ export function TerminalConsole({
     };
   }, [status, file, onSequenceComplete]);
 
+  const allLines = [...lines, ...extraLines];
+
   return (
     <div className="flex min-h-[420px] flex-col border border-black bg-black font-mono text-sm text-white">
       <div className="flex items-center gap-2 border-b border-white/20 px-4 py-3">
@@ -66,10 +70,10 @@ export function TerminalConsole({
       </div>
 
       <div className="flex-1 space-y-2 p-6">
-        {lines.length === 0 && (
+        {allLines.length === 0 && (
           <p className="text-slate-500">{"// awaiting input"}</p>
         )}
-        {lines.map((line, i) => (
+        {allLines.map((line, i) => (
           <SnapIn key={i}>
             <p className="break-all text-slate-300">
               <span className="text-white">{"> "}</span>
