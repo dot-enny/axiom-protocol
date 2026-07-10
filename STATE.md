@@ -135,17 +135,85 @@ independently-computed `sha256sum` of the same file. They matched
 exactly. Also confirmed the Anchor button is disabled before the drop
 and enabled only after the log sequence completes.
 
+**Session 5 — Freighter wallet integration (2026-07-08)**
+`@stellar/freighter-api` (v6.0.1) and `@stellar/stellar-sdk` (v16.0.1)
+installed. Checked the actually-installed type definitions before
+writing anything, same discipline as Session 3's soroban-sdk check —
+freighter-api v6 removed `getPublicKey()` entirely in favor of
+`getAddress()` (same purpose, returns `{ address }` instead of a raw
+string), and every call returns `{ ...data, error? }` rather than
+throwing. `frontend/lib/wallet.ts` (`connectFreighterWallet`) adapts
+that return-based pattern into a throw-based one so the calling React
+code can use plain try/catch.
+
+Wallet state is lifted into a context — `wallet-context.tsx`
+(`WalletProvider` + `useWallet()`) — rather than component props,
+since the connector lives in the sidebar while the pieces that need
+to *react* to connection state (Dropzone, VerificationWorkspace) are
+siblings under `app/dashboard/page.tsx`. The page itself stays a
+Server Component (needed for its `metadata` export); `WalletProvider`
+is the client boundary wrapping its children.
+
+`wallet-connector.tsx` replaces the old static "Connect Wallet"
+`Button` in the sidebar with one that reflects real state:
+idle/connecting/error text on the button itself, and once connected,
+a non-interactive bordered badge showing the truncated address
+(`GABC…1234` — Freighter has no programmatic "disconnect").
+
+`frontend/lib/soroban.ts` builds a real, validly-encoded (but
+never-submitted) Soroban `anchor_proof` invocation entirely offline —
+`Account(address, "0")` with a placeholder sequence number, no RPC
+round-trip. Contract ID is a placeholder too, but had to be a
+syntactically valid strkey (`StrKey.encodeContract(Buffer.alloc(32))`)
+rather than the literal truncated `'CAC...'` from the task, since
+`Contract`'s constructor validates the checksum. The invocation
+passes both `anchor_proof` arguments (hash + issuer as an `Address`
+ScVal) to actually match the Session 3 contract's real signature,
+even though nothing here calls the real thing yet.
+
+"Anchor to Soroban" (`verification-workspace.tsx`) now: guards on
+`status === "done"` AND a connected wallet (button `disabled` covers
+both); on click, appends `[NETWORK] Building Soroban transaction...`
+to the terminal, builds the XDR, appends `[NETWORK] Requesting
+Freighter signature...`, then really calls freighter-api's
+`signTransaction()` — this is a real wallet popup, not simulated —
+and appends either `[SOROBAN] Transaction signed and submitted.` or a
+failure line depending on the result. Terminal's own hash-reveal
+`useEffect` (Session 4) was left untouched; a new `extraLines` prop
+is just concatenated onto its internally-managed lines, so the two
+sequences (hash reveal, then anchor signing) coexist in one log
+without entangling their timing logic.
+
+Dropzone now reads `useWallet()` too and shows "Connect wallet to
+anchor" once a hash is ready but no wallet is connected, satisfying
+the task's "Dropzone knows if a wallet is connected" requirement
+concretely rather than just having the state technically reachable.
+
+Verified for real: Playwright + system Chrome against the running
+dev server. Freighter genuinely isn't installed in that browser,
+which incidentally exercised the real error path — clicking "Connect
+Wallet" correctly surfaced "Freighter extension not found." and the
+button flipped to "Retry Connection." Then dropped a known-content
+file and confirmed the hash matched an independently-computed
+`sha256sum` (unchanged from Session 4 — no regression), and confirmed
+"Anchor to Soroban" stayed disabled throughout since the wallet never
+connected, with the Dropzone hint visible. Zero console errors across
+the whole flow.
+
 ## Not built yet
 
 - The Soroban contract exists and compiles but is not deployed to
-  any network (no testnet/mainnet contract ID exists yet), and
-  nothing in `frontend/` calls it. "Anchor to Soroban" is enabled but
-  has no click handler — clicking it does nothing.
-- No real wallet connection — "Connect Wallet" is a placeholder with
-  no click handler. README.md mentions `@stellar/freighter-api` /
-  `@stellar/stellar-sdk` as the intended integration; neither is
-  installed yet.
-- No auth, no backend, no real on-chain calls anywhere in the app.
+  any network (no testnet/mainnet contract ID exists yet). The
+  frontend's `anchor_proof` invocation is real XDR built against a
+  placeholder contract ID and gets a real Freighter signature, but
+  nothing is ever submitted to an RPC endpoint — signing is as far as
+  the pipeline goes.
+- No auth, no backend.
 - The Verification Ledger is static mock data — nothing reads from
   Soroban or any backend yet.
 - No contract unit tests yet.
+- Not tested against a real Freighter installation (this machine
+  doesn't have the extension) — only the "not installed" error path
+  and the pre-connection UI states were verified live. The
+  connected/signing/success paths are implemented per the verified
+  freighter-api v6 type signatures but unexercised by a real popup.
