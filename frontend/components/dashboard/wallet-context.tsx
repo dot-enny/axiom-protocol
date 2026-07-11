@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { connectFreighterWallet } from "@/lib/wallet";
+import { connectFreighterWallet, FreighterNotFoundError } from "@/lib/wallet";
 
 type WalletConnectionState =
   | "disconnected"
@@ -19,6 +19,8 @@ interface WalletContextValue {
   state: WalletConnectionState;
   address: string | null;
   error: string | null;
+  /** True when `error` is specifically "the extension isn't installed". */
+  isWalletMissing: boolean;
   connect: () => void;
 }
 
@@ -28,23 +30,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<WalletConnectionState>("disconnected");
   const [address, setAddress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isWalletMissing, setIsWalletMissing] = useState(false);
 
   const connect = useCallback(() => {
     setState("connecting");
     setError(null);
+    setIsWalletMissing(false);
     connectFreighterWallet()
       .then((connectedAddress) => {
         setAddress(connectedAddress);
         setState("connected");
       })
-      .catch((err: Error) => {
-        setError(err.message);
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Failed to connect wallet.");
+        setIsWalletMissing(err instanceof FreighterNotFoundError);
         setState("error");
       });
   }, []);
 
   return (
-    <WalletContext.Provider value={{ state, address, error, connect }}>
+    <WalletContext.Provider
+      value={{ state, address, error, isWalletMissing, connect }}
+    >
       {children}
     </WalletContext.Provider>
   );

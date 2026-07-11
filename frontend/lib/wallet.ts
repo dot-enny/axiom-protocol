@@ -6,6 +6,20 @@ import {
 } from "@stellar/freighter-api";
 
 /**
+ * Thrown specifically when the Freighter browser extension isn't
+ * installed at all, as distinct from other connection failures (denied
+ * access, an internal Freighter error). The UI offers a different,
+ * actionable recovery path for this case — install the wallet — rather
+ * than a generic retry.
+ */
+export class FreighterNotFoundError extends Error {
+  constructor() {
+    super("Freighter extension not found.");
+    this.name = "FreighterNotFoundError";
+  }
+}
+
+/**
  * Requests access to the user's Freighter wallet and returns their public
  * address. Throws with a human-readable message if the extension isn't
  * installed, access is denied, or Freighter reports an error at any step.
@@ -16,7 +30,7 @@ import {
 export async function connectFreighterWallet(): Promise<string> {
   const connected = await isConnected();
   if (connected.error || !connected.isConnected) {
-    throw new Error("Freighter extension not found.");
+    throw new FreighterNotFoundError();
   }
 
   const allowed = await isAllowed();
