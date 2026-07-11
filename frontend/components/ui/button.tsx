@@ -1,11 +1,13 @@
 import Link from "next/link";
-import type { ButtonHTMLAttributes } from "react";
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes } from "react";
 
 type ButtonVariant = "primary" | "ghost";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   href?: string;
+  target?: AnchorHTMLAttributes<HTMLAnchorElement>["target"];
+  rel?: AnchorHTMLAttributes<HTMLAnchorElement>["rel"];
 }
 
 const BASE =
@@ -19,6 +21,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
 export function Button({
   variant = "primary",
   href,
+  target,
+  rel,
   className = "",
   children,
   ...props
@@ -27,7 +31,7 @@ export function Button({
 
   if (href) {
     return (
-      <Link href={href} className={classes}>
+      <Link href={href} target={target} rel={rel} className={classes}>
         {children}
       </Link>
     );
