@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { signTransaction } from "@stellar/freighter-api";
 import { Networks } from "@stellar/stellar-sdk";
 import { Dropzone } from "@/components/dashboard/dropzone";
@@ -32,14 +32,38 @@ function anchorStatusLabel(
 export function VerificationWorkspace() {
   const [status, setStatus] = useState<VerificationStatus>("idle");
   const [file, setFile] = useState<VerifiedFile | null>(null);
-  const [anchorLines, setAnchorLines] = useState<string[]>([]);
+  const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const [isAnchoring, setIsAnchoring] = useState(false);
-  const { address } = useWallet();
+  const {
+    address,
+    state: walletState,
+    error: walletError,
+    isWalletMissing,
+  } = useWallet();
+
+  const appendLine = useCallback((line: string) => {
+    setTerminalLines((prev) => [...prev, line]);
+  }, []);
+
+  // Wallet connection lives in a different part of the tree (the sidebar),
+  // so any failure there is surfaced here too via the shared wallet
+  // context, rather than only being visible next to the Connect button.
+  useEffect(() => {
+    if (walletState !== "error" || !walletError) return;
+
+    if (isWalletMissing) {
+      appendLine(
+        "[SYSTEM] Freighter wallet not detected. Installation required: https://freighter.app"
+      );
+    } else {
+      appendLine(`[NETWORK] Wallet connection failed: ${walletError}`);
+    }
+  }, [walletState, walletError, isWalletMissing, appendLine]);
 
   async function handleFileDropped(dropped: File) {
     const hash = await sha256Hex(dropped);
     setFile({ name: dropped.name, size: dropped.size, hash });
-    setAnchorLines([]);
+    setTerminalLines([]);
     setStatus("processing");
   }
 
@@ -49,15 +73,12 @@ export function VerificationWorkspace() {
     if (!file || !address || isAnchoring) return;
 
     setIsAnchoring(true);
-    setAnchorLines(["[NETWORK] Building Soroban transaction..."]);
+    appendLine("[NETWORK] Building Soroban transaction...");
 
     const unsignedXdr = buildAnchorProofTransaction(address, file.hash);
     await new Promise((resolve) => setTimeout(resolve, ANCHOR_STEP_DELAY_MS));
 
-    setAnchorLines((prev) => [
-      ...prev,
-      "[NETWORK] Requesting Freighter signature...",
-    ]);
+    appendLine("[NETWORK] Requesting Freighter signature...");
 
     const result = await signTransaction(unsignedXdr, {
       networkPassphrase: Networks.TESTNET,
@@ -65,15 +86,9 @@ export function VerificationWorkspace() {
     });
 
     if (result.error) {
-      setAnchorLines((prev) => [
-        ...prev,
-        `[SOROBAN] Signature request failed: ${result.error.message}`,
-      ]);
+      appendLine(`[SOROBAN] Signature request failed: ${result.error.message}`);
     } else {
-      setAnchorLines((prev) => [
-        ...prev,
-        "[SOROBAN] Transaction signed and submitted.",
-      ]);
+      appendLine("[SOROBAN] Transaction signed and submitted.");
     }
 
     setIsAnchoring(false);
@@ -87,7 +102,7 @@ export function VerificationWorkspace() {
           status={status}
           file={file}
           onSequenceComplete={handleSequenceComplete}
-          extraLines={anchorLines}
+          extraLines={terminalLines}
         />
       </div>
 
