@@ -8,7 +8,12 @@ import { TerminalConsole } from "@/components/dashboard/terminal-console";
 import { Button } from "@/components/ui/button";
 import { useWallet } from "@/components/dashboard/wallet-context";
 import { sha256Hex } from "@/lib/hash";
-import { buildAnchorProofTransaction } from "@/lib/soroban";
+import {
+  buildAnchorProofTransaction,
+  confirmTransaction,
+  prepareAnchorProofTransaction,
+  submitSignedTransaction,
+} from "@/lib/soroban";
 
 export type VerificationStatus = "idle" | "processing" | "done";
 
@@ -17,8 +22,6 @@ export interface VerifiedFile {
   size: number;
   hash: string;
 }
-
-const ANCHOR_STEP_DELAY_MS = 400;
 
 function anchorStatusLabel(
   status: VerificationStatus,
@@ -73,25 +76,32 @@ export function VerificationWorkspace() {
     if (!file || !address || isAnchoring) return;
 
     setIsAnchoring(true);
-    appendLine("[NETWORK] Building Soroban transaction...");
 
-    const unsignedXdr = buildAnchorProofTransaction(address, file.hash);
-    await new Promise((resolve) => setTimeout(resolve, ANCHOR_STEP_DELAY_MS));
+    try {
+      appendLine("[NETWORK] Simulating transaction payload...");
+      const unsignedTx = await buildAnchorProofTransaction(address, file.hash);
+      const preparedTx = await prepareAnchorProofTransaction(unsignedTx);
 
-    appendLine("[NETWORK] Requesting Freighter signature...");
+      appendLine("[NETWORK] Requesting Freighter signature...");
+      const signResult = await signTransaction(preparedTx.toXDR(), {
+        networkPassphrase: Networks.TESTNET,
+        address,
+      });
+      if (signResult.error) {
+        throw new Error(signResult.error.message);
+      }
 
-    const result = await signTransaction(unsignedXdr, {
-      networkPassphrase: Networks.TESTNET,
-      address,
-    });
+      appendLine("[NETWORK] Submitting to Stellar Testnet...");
+      const hash = await submitSignedTransaction(signResult.signedTxXdr);
+      await confirmTransaction(hash);
 
-    if (result.error) {
-      appendLine(`[SOROBAN] Signature request failed: ${result.error.message}`);
-    } else {
-      appendLine("[SOROBAN] Transaction signed and submitted.");
+      appendLine("[SOROBAN] Anchor confirmed. Ledger state updated.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      appendLine(`[ERROR] Transaction failed: ${message}`);
+    } finally {
+      setIsAnchoring(false);
     }
-
-    setIsAnchoring(false);
   }
 
   return (
