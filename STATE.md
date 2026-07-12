@@ -200,20 +200,79 @@ file and confirmed the hash matched an independently-computed
 connected, with the Dropzone hint visible. Zero console errors across
 the whole flow.
 
+(Two follow-up fixes after Session 5, not logged as their own numbered
+sessions: wallet connection errors were only ever set as a Button
+`title` attribute — invisible unless hovered — now rendered as visible
+text and also logged to the Terminal Console; and a missing Freighter
+extension now shows "Stellar wallet required." plus a real
+Button-styled link to freighter.app instead of a dead-end "Retry".)
+
+**Session 6 — Real Testnet integration (2026-07-11)**
+The contract is genuinely deployed now: `frontend/.env.local` (gitignored,
+per Next.js convention — must be recreated in any other environment or CI)
+sets `NEXT_PUBLIC_CONTRACT_ID=CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK`.
+
+`lib/soroban.ts` no longer builds an offline, never-submitted transaction
+against a placeholder account and contract ID. It now:
+- `buildAnchorProofTransaction` fetches the real account (real sequence
+  number) via `rpc.Server.getAccount`, and targets the real contract ID
+  from the env var.
+- `prepareAnchorProofTransaction` calls `server.prepareTransaction`,
+  which simulates against the network and assembles the correct
+  resource fee/footprint. If the contract would panic (e.g. this hash
+  is already anchored), this throws with the simulation's own message —
+  confirmed by reading the SDK source directly
+  (`rpc/server.js`: `prepareTransaction` catches `Api.isSimulationError`
+  and re-throws `new Error(simResponse.error)`), not assumed.
+- `submitSignedTransaction` reconstructs the signed `Transaction` from
+  Freighter's returned XDR (`TransactionBuilder.fromXDR`) and calls
+  `server.sendTransaction`.
+- `confirmTransaction` polls with the SDK's built-in
+  `server.pollTransaction` (30 attempts, ~1s apart) rather than a
+  hand-rolled retry loop, and throws unless the final status is
+  literally `SUCCESS`.
+
+`VerificationWorkspace`'s anchor click handler wraps the whole
+simulate → sign → submit → confirm sequence in one try/catch, logging
+the four lines from the task spec at each stage and funneling every
+possible failure (simulation panic, signature rejection, network
+rejection, confirmation timeout) into the same
+`[ERROR] Transaction failed: {message}` format with the real message
+from whichever stage failed — no success state is set unless
+`confirmTransaction` actually returns without throwing.
+
+Verified as thoroughly as this environment allows, in three layers:
+1. Lint/build clean, and a browser regression pass confirmed the
+   parts reachable without a real wallet still work (wallet-missing
+   guidance, real SHA-256 hashing) — same as prior sessions.
+2. A standalone Node script confirmed real RPC connectivity (Testnet
+   health check) and that the contract ID is genuinely deployed:
+   `getContractWasmByContractId` returned 1,697 bytes — the exact
+   size recorded when this WASM was compiled locally in Session 3,
+   strong evidence it's the same build.
+3. Because this machine has no real Freighter installation (same
+   limitation noted in Session 5), the actual signing popup couldn't
+   be driven directly. Instead, ran the *entire real pipeline*
+   end-to-end outside the browser: generated a fresh keypair, funded
+   it via Stellar's Friendbot testnet faucet, then used
+   `lib/soroban.ts`'s exact build/prepare logic, signed with the raw
+   keypair in place of Freighter (identical XDR-signing mechanics,
+   different signer), submitted, and polled to a genuine `SUCCESS`.
+   Confirmed the write actually landed by calling `verify_proof`
+   read-only afterward — it returned the real issuer address and
+   ledger timestamp. This exercises everything except the Freighter
+   popup itself, which is the one piece that genuinely requires the
+   browser extension to test.
+
 ## Not built yet
 
-- The Soroban contract exists and compiles but is not deployed to
-  any network (no testnet/mainnet contract ID exists yet). The
-  frontend's `anchor_proof` invocation is real XDR built against a
-  placeholder contract ID and gets a real Freighter signature, but
-  nothing is ever submitted to an RPC endpoint — signing is as far as
-  the pipeline goes.
 - No auth, no backend.
 - The Verification Ledger is static mock data — nothing reads from
-  Soroban or any backend yet.
+  Soroban or any backend yet. (`verify_proof` works, per the Session 6
+  test above — nothing in the UI calls it yet.)
 - No contract unit tests yet.
-- Not tested against a real Freighter installation (this machine
-  doesn't have the extension) — only the "not installed" error path
-  and the pre-connection UI states were verified live. The
-  connected/signing/success paths are implemented per the verified
-  freighter-api v6 type signatures but unexercised by a real popup.
+- Not tested against a real Freighter installation or a real browser
+  signature popup (this machine doesn't have the extension) — the
+  underlying sign/submit/confirm pipeline was verified for real
+  against Testnet (see Session 6), but with a raw keypair standing in
+  for Freighter's signing step specifically.
