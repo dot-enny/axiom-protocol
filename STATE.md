@@ -264,6 +264,47 @@ Verified as thoroughly as this environment allows, in three layers:
    popup itself, which is the one piece that genuinely requires the
    browser extension to test.
 
+**Session 7 — PDF compliance receipt (2026-07-14)**
+`jspdf` (v4.2.1) installed. `frontend/lib/pdf.ts`
+(`downloadComplianceReceipt`) builds a one-page A4 receipt entirely in
+courier, black-on-white — no color anywhere, matching the design
+system even on paper: a bold tracked header ("AXIOM PROTOCOL" /
+"// CRYPTOGRAPHIC COMPLIANCE RECEIPT"), a solid black divider bar
+(`rect(..., 'F')`, not a hairline `line()` — reads harsher), the five
+required fields (hash, network, contract ID, issuer, UTC timestamp of
+the anchor) each as a small tracked label over its value, a second
+divider, and a footer disclaimer that the PDF is a local record and
+the chain itself is the source of truth. Field values use `maxWidth`
+wrapping as a safety net, but at the chosen font size a 64-character
+hash and 56-character Stellar addresses/contract IDs all fit on one
+line without wrapping.
+
+`VerificationWorkspace` now tracks anchor confirmation as its own
+piece of state (`anchorResult: { timestampIso } | null`), set right
+after `confirmTransaction` resolves (real UTC time of confirmation,
+not a placeholder) and cleared whenever a new file is dropped. Once
+set, the bottom-bar button swaps from "Anchor to Soroban" to "Download
+Receipt" — anchoring again isn't a meaningful action once it already
+succeeded, so this replaces rather than adds a button. The download
+handler reads `NEXT_PUBLIC_CONTRACT_ID` directly (same pattern as
+`lib/soroban.ts`) rather than threading it through as a prop.
+
+Verified for real, in two parts, since completing an actual anchor in
+this browser still requires Freighter (not installed here — same gap
+as Sessions 5/6):
+1. Generated a real PDF with `lib/pdf.ts`'s exact logic (replicated
+   in a throwaway Node script, since path-aliased TS can't be
+   `import`ed directly into plain Node) using realistic sample data,
+   wrote it to disk, and read it back — confirmed layout, black
+   dividers, courier font, and all five fields render exactly as
+   intended with nothing cut off.
+2. Browser regression pass confirmed the "Download Receipt" button
+   correctly does *not* appear before anchoring (only "Anchor to
+   Soroban" is visible), and that hashing and wallet-missing guidance
+   are unaffected. The swap-on-confirmation behavior itself is
+   implemented and code-reviewed but, like the Freighter signing
+   popup it depends on, unexercised live in this environment.
+
 ## Not built yet
 
 - No auth, no backend.
@@ -275,4 +316,7 @@ Verified as thoroughly as this environment allows, in three layers:
   signature popup (this machine doesn't have the extension) — the
   underlying sign/submit/confirm pipeline was verified for real
   against Testnet (see Session 6), but with a raw keypair standing in
-  for Freighter's signing step specifically.
+  for Freighter's signing step specifically. This also means the
+  Session 7 "Download Receipt" button swap has never been triggered
+  by an actual successful anchor in the browser, only verified by
+  code review + a standalone PDF-content check.
