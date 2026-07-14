@@ -14,6 +14,7 @@ import {
   prepareAnchorProofTransaction,
   submitSignedTransaction,
 } from "@/lib/soroban";
+import { downloadComplianceReceipt } from "@/lib/pdf";
 
 export type VerificationStatus = "idle" | "processing" | "done";
 
@@ -23,10 +24,16 @@ export interface VerifiedFile {
   hash: string;
 }
 
+interface AnchorResult {
+  timestampIso: string;
+}
+
 function anchorStatusLabel(
   status: VerificationStatus,
-  walletConnected: boolean
+  walletConnected: boolean,
+  anchored: boolean
 ): string {
+  if (anchored) return "Anchor confirmed on Stellar Testnet";
   if (status !== "done") return "Awaiting a verified hash";
   if (!walletConnected) return "Hash ready — connect wallet to anchor";
   return "Hash ready — not yet anchored";
@@ -37,6 +44,7 @@ export function VerificationWorkspace() {
   const [file, setFile] = useState<VerifiedFile | null>(null);
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const [isAnchoring, setIsAnchoring] = useState(false);
+  const [anchorResult, setAnchorResult] = useState<AnchorResult | null>(null);
   const {
     address,
     state: walletState,
@@ -67,6 +75,7 @@ export function VerificationWorkspace() {
     const hash = await sha256Hex(dropped);
     setFile({ name: dropped.name, size: dropped.size, hash });
     setTerminalLines([]);
+    setAnchorResult(null);
     setStatus("processing");
   }
 
@@ -96,12 +105,24 @@ export function VerificationWorkspace() {
       await confirmTransaction(hash);
 
       appendLine("[SOROBAN] Anchor confirmed. Ledger state updated.");
+      setAnchorResult({ timestampIso: new Date().toISOString() });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       appendLine(`[ERROR] Transaction failed: ${message}`);
     } finally {
       setIsAnchoring(false);
     }
+  }
+
+  function handleDownloadReceipt() {
+    if (!file || !address || !anchorResult) return;
+
+    downloadComplianceReceipt({
+      hash: file.hash,
+      contractId: process.env.NEXT_PUBLIC_CONTRACT_ID ?? "Unknown",
+      issuer: address,
+      timestampIso: anchorResult.timestampIso,
+    });
   }
 
   return (
@@ -118,15 +139,21 @@ export function VerificationWorkspace() {
 
       <div className="flex items-center justify-between border-t border-black px-6 py-6 md:px-10">
         <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
-          {anchorStatusLabel(status, Boolean(address))}
+          {anchorStatusLabel(status, Boolean(address), Boolean(anchorResult))}
         </p>
-        <Button
-          disabled={status !== "done" || !address || isAnchoring}
-          onClick={handleAnchorClick}
-          className="px-6 py-3 text-xs"
-        >
-          Anchor to Soroban
-        </Button>
+        {anchorResult ? (
+          <Button onClick={handleDownloadReceipt} className="px-6 py-3 text-xs">
+            Download Receipt
+          </Button>
+        ) : (
+          <Button
+            disabled={status !== "done" || !address || isAnchoring}
+            onClick={handleAnchorClick}
+            className="px-6 py-3 text-xs"
+          >
+            Anchor to Soroban
+          </Button>
+        )}
       </div>
     </div>
   );
