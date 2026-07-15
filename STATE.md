@@ -467,6 +467,74 @@ the real contract ID, confirmed the webhook button is genuinely
 `disabled` (not just styled to look inactive), and screenshotted both
 desktop and mobile layouts after fixing the nav overflow bugs above.
 
+**Session 11 — Deal Room multi-sig simulation (2026-07-15)**
+New route `frontend/app/(platform)/deal-room/page.tsx` (again placed
+inside the shared `(platform)` group rather than nested under
+`/dashboard/pending`, for the same reason as Session 10's Developer
+API route — it's a top-level nav destination, and the group gives it
+the persistent sidebar for free). A fifth sidebar link, "Deal Room",
+carries a static `[ 1 PENDING ]` badge — hardcoded rather than wired
+to real deal count, deliberately: there's no shared state between the
+sidebar and the Deal Room's mock data, and adding one just to make a
+static badge dynamic would be exactly the kind of premature plumbing
+this project avoids.
+
+`components/deal-room/` holds two views orchestrated by
+`deal-room-workspace.tsx` (client, lifted state — same shape as
+`VerificationWorkspace`): a **Pending Queue** table (`pending-queue.tsx`)
+listing the one mock deal (hash, asset type, required sigs, status),
+and an **Execution Detail** view (`execution-detail.tsx`) with a
+three-party signature checklist (`signature-row.tsx`) — Issuer and
+Auditor pre-signed with solid black `[ ✓ SIGNED ]` / `[ ✓ VERIFIED ]`
+badges, Counterparty ("You") starting as an outlined
+`[ AWAITING SIGNATURE ]`. The counterparty's address is the *actual*
+connected Freighter address from `useWallet()` when available, falling
+back to "Not connected" — deliberately not fabricated the way the
+other two parties' addresses are, since faking the current user's own
+identity would cross from "mocked infrastructure" into actually
+misleading UI. Clicking "Sign & Execute Contract" logs
+`[NETWORK] Requesting multi-sig Freighter execution...` to a dedicated
+`execution-log.tsx` terminal (visually matching `TerminalConsole`'s
+dot-header styling but independent — the two aren't state-compatible
+enough to share one component), waits ~1.2s, then logs a completion
+line, flips the counterparty's badge to signed, and replaces the
+button with a disabled `[ ESCROW LOCKED & ANCHORED ]`. The queue's
+Required Sigs/Status columns are derived from the same signed flag
+rather than frozen mock text, so going back to the queue after
+executing shows `3/3` / `Escrow Locked & Anchored` — the two views
+stay consistent since there's only one real source of truth for the
+signed state.
+
+Two real layout bugs found and fixed during mobile verification, not
+cosmetic nitpicks:
+1. A fifth sidebar link made the existing "equal-width columns that
+   wrap" mobile nav pattern (from Session 10) actively worse, so the
+   mobile nav was redesigned to a horizontally-scrolling row
+   (`overflow-x-auto`, `shrink-0`, `whitespace-nowrap` per link)
+   instead of patching column-wrapping again — this scales to any
+   future link count without revisiting the nav every session. The new
+   badge span needed its own `whitespace-nowrap`/`shrink-0` or it
+   wrapped to three lines inside the link.
+2. The Pending Queue table's header wrapped mid-phrase
+   (`DOCUMENT`/`HASH`) on mobile even though its wrapper was scrolling
+   correctly (`overflow-x: auto`, confirmed via direct DOM measurement,
+   not just a visual guess) — the table's `min-w-[720px]` was a few
+   dozen pixels short of its actual unwrapped content width (the long
+   "Escrow Locked & Anchored" status string was the culprit). Fixed
+   with `whitespace-nowrap` on the table itself so cells can never
+   wrap and the table grows to whatever width its content genuinely
+   needs, relying purely on the scroll container as the escape hatch —
+   more robust than guessing a larger fixed `min-w` value.
+
+Verified for real: typecheck/lint/build clean; Playwright + system
+Chrome drove the full flow — queue row content, click-through to
+detail, all three initial badge states, clicking execute and observing
+the exact terminal log line and the button's disabled locked state,
+confirming the queue reflects updated `3/3`/`Escrow Locked & Anchored`
+on return, and mobile screenshots re-taken after each of the two nav
+fixes above to confirm by eye, not just by assertion, that nothing
+clips or overlaps.
+
 ## Not built yet
 
 - No auth, no backend.
