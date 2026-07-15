@@ -305,12 +305,68 @@ as Sessions 5/6):
    implemented and code-reviewed but, like the Freighter signing
    popup it depends on, unexercised live in this environment.
 
+**Session 8 — Public verification portal (2026-07-15)**
+New public route at `frontend/app/verify/page.tsx` — no wallet, no
+sidebar, just `Frame` + a centered `VerifyPanel`. This is the first
+route in the app that reads from the live contract without ever
+requiring a signature.
+
+`lib/soroban.ts` gained `queryVerifyProof(hash)`, a genuinely
+read-only call: it builds a `verify_proof` invocation and calls
+`server.simulateTransaction` directly (never `prepareTransaction` /
+`sendTransaction` — nothing is submitted, so there's no fee and no
+ledger write). The transaction still needs *some* syntactically valid
+source account to build a legal envelope, so a fresh throwaway
+`Keypair.random()` is minted per page load purely for that purpose —
+it never signs anything and doesn't need to exist on-chain, since
+simulation doesn't validate the source account. Confirmed this by
+reading the RPC response types directly (`rpc.Api.isSimulationError` /
+`isSimulationSuccess`, `SimulateTransactionSuccessResponse.result.retval`)
+rather than assuming, same discipline as prior sessions. The contract's
+`Option<ComplianceRecord>` return decodes via `scValToNative`: present
+as a `{ timestamp, issuer }` object when found, `undefined` when the
+option was `None` — both map to `queryVerifyProof` returning `null`.
+
+`components/verify/verify-panel.tsx` is a single client component
+(input + button + result, per the task's minimal-file spirit — no
+sub-components needed for something this small): a heavy 2px-bordered
+input for the 64-char hex hash, a `[NETWORK] Scanning blocks...`
+loading line while the RPC call is in flight, and two terminal result
+states — a massive inverted (white-on-black) `VERIFIED: ANCHOR RECORD
+FOUND` block with the real issuer address and a real UTC timestamp
+decoded from the ledger's `u64`, or a stark bordered `REJECTED: NO
+MATCH ON LEDGER` block, used for both "never anchored" (business
+outcome) and actual RPC/network failures — a small `[ERROR]` detail
+line is appended in the latter case so real failures aren't fully
+indistinguishable from a legitimate miss, without contradicting the
+task's two-state spec. A lightweight client-side format check (64 hex
+chars) catches obvious paste mistakes before spending an RPC round
+trip.
+
+Verified for real, in two layers, and this is the first session where
+the *entire* feature could be exercised genuinely end-to-end — no
+Freighter gap here, since the whole point is that it needs no wallet:
+1. A standalone Node script ran the exact `queryVerifyProof` logic
+   against live Testnet: a freshly-generated hash that was never
+   anchored correctly returned `null`; a second hash was actually
+   anchored via a funded Friendbot keypair (fresh `anchor_proof` call,
+   polled to real `SUCCESS`), and querying it back returned the exact
+   issuer address and a timestamp within seconds of real time.
+2. Playwright + system Chrome against the running dashboard drove all
+   three UI states in the real browser hitting the real RPC: malformed
+   input surfaces the format warning without ever calling the network;
+   the never-anchored hash resolves to the "Rejected" block; the hash
+   anchored in step 1 resolves to "Verified" with the matching issuer
+   address rendered on screen. Zero console errors throughout.
+
 ## Not built yet
 
 - No auth, no backend.
-- The Verification Ledger is static mock data — nothing reads from
-  Soroban or any backend yet. (`verify_proof` works, per the Session 6
-  test above — nothing in the UI calls it yet.)
+- The Verification Ledger (on the `/dashboard` route) is still static
+  mock data — nothing there reads from Soroban yet. The public
+  `/verify` portal (Session 8) does read real ledger state now, but
+  it's a separate, purpose-built read path, not a wiring-up of the
+  existing ledger table.
 - No contract unit tests yet.
 - Not tested against a real Freighter installation or a real browser
   signature popup (this machine doesn't have the extension) — the
