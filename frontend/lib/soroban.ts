@@ -1,10 +1,13 @@
 import {
+  Account,
   Address,
   Contract,
   BASE_FEE,
+  Keypair,
   Networks,
   TransactionBuilder,
   nativeToScVal,
+  scValToNative,
   rpc,
   xdr,
   type Transaction,
@@ -15,6 +18,17 @@ const NETWORK_PASSPHRASE = Networks.TESTNET;
 const POLL_ATTEMPTS = 30;
 
 const server = new rpc.Server(RPC_URL);
+
+// A read-only simulation needs *some* syntactically valid source account to
+// build the transaction envelope, but that account never signs or pays a
+// fee — simulation doesn't touch it. Generating one throwaway keypair per
+// page load avoids fetching (or funding) a real account just to query.
+const READ_ONLY_SOURCE = Keypair.random().publicKey();
+
+export interface ComplianceRecord {
+  timestampIso: string;
+  issuer: string;
+}
 
 function getContractId(): string {
   const contractId = process.env.NEXT_PUBLIC_CONTRACT_ID;
@@ -104,6 +118,44 @@ export async function confirmTransaction(hash: string): Promise<void> {
   }
 
   throw new Error(describeTransactionResult(result.resultXdr));
+}
+
+/**
+ * Read-only lookup of a hash's anchor record via `verify_proof`. Simulates
+ * rather than submits — no signature, no fee, no ledger write. Returns
+ * `null` if the contract's `Option<ComplianceRecord>` came back empty
+ * (never anchored), not just on a network-level failure.
+ */
+export async function queryVerifyProof(
+  hash: string
+): Promise<ComplianceRecord | null> {
+  const contract = new Contract(getContractId());
+  const account = new Account(READ_ONLY_SOURCE, "0");
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call("verify_proof", nativeToScVal(hash)))
+    .setTimeout(30)
+    .build();
+
+  const simulated = await server.simulateTransaction(tx);
+
+  if (rpc.Api.isSimulationError(simulated)) {
+    throw new Error(simulated.error);
+  }
+  if (!rpc.Api.isSimulationSuccess(simulated) || !simulated.result) {
+    return null;
+  }
+
+  const record = scValToNative(simulated.result.retval);
+  if (!record) return null;
+
+  return {
+    timestampIso: new Date(Number(record.timestamp) * 1000).toISOString(),
+    issuer: record.issuer,
+  };
 }
 
 function describeTransactionResult(resultXdr?: xdr.TransactionResult): string {
