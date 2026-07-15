@@ -405,6 +405,68 @@ existing wallet-missing guidance across unchanged. Also screenshotted
 the mobile layout to confirm the nav row and full-width wallet button
 render legibly at a 390px viewport.
 
+**Session 10 — Developer API portal (2026-07-15)**
+New route `frontend/app/(platform)/developers/page.tsx` (placed inside
+the Session 9 `(platform)` route group, not a stray top-level
+`app/developers/`, so it inherits the persistent sidebar/wallet layout
+for free — same URL the task asked for, `/developers`). A fourth
+sidebar link, "Developer API", was added to `sidebar-nav.tsx`
+alongside Dashboard/Verify Ledger/Ledger Explorer, participating in
+the same active-link highlighting.
+
+Three sections under `components/developers/`, each opening with a
+shared `SectionHeader` (`// LABEL` + bold heading, matching the
+Ledger's existing section-header convention) and separated by harsh
+1px borders:
+- **`api-credentials.tsx`** (client component — the only interactive
+  section): "Generate API Key" simulates a brief loading state, then
+  mints a key client-side via `crypto.getRandomValues` (`ax_live_` +
+  32 hex chars) — not hardcoded, so every click produces a
+  genuinely different-looking key, consistent with this project's
+  running preference for real Web Crypto over `Math.random()` even
+  for admittedly mocked features. A monospace read-only input shows
+  the key with an adjacent "Copy" button wired to the real
+  `navigator.clipboard` API (verified by reading the clipboard back
+  in a real browser, not just checking the button click fired).
+  "Regenerate Key" replaces the button once a key exists.
+- **`api-docs.tsx`** (static): two dark terminal-style code blocks
+  (same dot-header chrome as the dashboard's `TerminalConsole`) for
+  the mock `POST /v1/anchor` request and its `200 OK` response, exact
+  content from the task spec including the real deployed contract ID
+  in the response's `ledger.contract_id`.
+- **`infrastructure-status.tsx`** (static): a two-column grid — Rate
+  Limits (`Tier: Institutional`, `0 / 10,000 requests per minute`,
+  plus a zero-filled usage bar) and Webhooks (`Endpoint URL: None
+  configured` and a disabled "Add Webhook" button using `Button`'s
+  existing `disabled:` styling from Session 4).
+
+One real bug found and fixed during verification, not just cosmetic:
+adding a fourth sidebar link broke the mobile nav row two ways in
+sequence. First, the row's flex children didn't have `min-w-0`, so
+Tailwind's default flex-item `min-width: auto` refused to let "Ledger
+Explorer" shrink, and it overflowed off the right edge of a 390px
+viewport instead of wrapping — caught by an actual mobile screenshot,
+not just a visibility assertion (which would have passed regardless,
+since the element was still technically in the DOM and "visible").
+Fixing the outer row's `min-width` surfaced a second, nested instance
+of the exact same bug: the label `<span>` inside each link is *itself*
+a flex item (of the row's internal flex layout) and also needed its
+own `min-w-0` before it would wrap instead of spilling text into
+neighboring nav cells. Once both were fixed, labels still broke
+mid-word ("DASHBOA/RD") at 4-equal-columns width, so the mobile row's
+type was tightened (`text-[11px] tracking-normal`, unchanged at `md:`)
+to fit whole words. Re-screenshotted after each fix to confirm, rather
+than trusting the diff.
+
+Verified for real: typecheck/lint/build clean; Playwright + system
+Chrome exercised the actual clipboard (wrote via the UI, read back via
+`navigator.clipboard.readText()`, confirmed an exact match), confirmed
+regenerating produces a different key from the first, confirmed both
+code blocks contain the exact expected request/response text including
+the real contract ID, confirmed the webhook button is genuinely
+`disabled` (not just styled to look inactive), and screenshotted both
+desktop and mobile layouts after fixing the nav overflow bugs above.
+
 ## Not built yet
 
 - No auth, no backend.
