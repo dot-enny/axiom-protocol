@@ -359,6 +359,52 @@ Freighter gap here, since the whole point is that it needs no wallet:
    anchored in step 1 resolves to "Verified" with the matching issuer
    address rendered on screen. Zero console errors throughout.
 
+**Session 9 — Unified navigation layout (2026-07-15)**
+The sidebar is no longer a dashboard-only component wired up inside a
+single page — it's now a persistent layout shared by every
+authenticated-feeling route. `frontend/app/(platform)/layout.tsx` is a
+new route group layout (the `(platform)` folder name doesn't affect
+URLs — `/dashboard` and `/verify` are unchanged) that owns
+`WalletProvider` + `Frame` + `AppSidebar` once; `app/(platform)/dashboard/page.tsx`
+and `app/(platform)/verify/page.tsx` (moved from the old top-level
+`app/dashboard/` and `app/verify/`) now render only their own content,
+no chrome. This means wallet connection state genuinely persists
+across client-side navigation between `/dashboard` and `/verify` now
+— confirmed live, not just structurally, since Next.js layouts don't
+remount on a route change within the same group.
+
+The old `components/dashboard/sidebar.tsx` (dashboard-only, no nav)
+is gone, replaced by `components/layout/app-sidebar.tsx` +
+`components/layout/sidebar-nav.tsx` — split out because the nav list
+needs `usePathname` (client-only) while the sidebar shell itself has
+no reason to be a client component. Three links: **Dashboard**
+(`/dashboard`), **Verify Ledger** (`/verify`), and **Ledger Explorer**
+(external, `stellar.expert`'s Testnet contract page for the real
+deployed contract ID, `target="_blank"` + `rel="noopener noreferrer"`
++ a trailing `↗` glyph). The active internal link gets a solid
+black/white inversion plus a trailing `→`; external never counts as
+"active" since it doesn't correspond to an app route. Responsive:
+desktop stacks the three links as full-width rows in the vertical
+rail; mobile lays them out as an equal-width row with vertical
+dividers directly under the brand bar, still above the wallet
+connector — kept the mobile "collapses to a horizontal bar" spirit
+from Session 2 rather than just hiding nav below `md:`.
+
+Verified for real: typecheck/lint/build all clean after the file
+moves (had to clear a stale `.next/types` cache once, from routes
+that no longer exist at their old paths — not a real error). Browser
+regression via Playwright + system Chrome hit both routes: exactly
+one nav link is ever styled active at a time (confirmed by screenshot,
+not just class-string matching — an early assertion using
+`class.includes("bg-black")` gave a false positive because the
+*inactive* style's own `hover:bg-black` contains that substring, a bug
+in the test script, not the component), the external link's `href`/
+`target`/`rel`/glyph are all correct, and clicking the sidebar's
+`/verify` link (real client-side nav, not `page.goto`) carried the
+existing wallet-missing guidance across unchanged. Also screenshotted
+the mobile layout to confirm the nav row and full-width wallet button
+render legibly at a 390px viewport.
+
 ## Not built yet
 
 - No auth, no backend.
