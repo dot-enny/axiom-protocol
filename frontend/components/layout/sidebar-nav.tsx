@@ -17,6 +17,7 @@ const NAV_LINKS: NavLink[] = [
   { label: "Verify Ledger", href: "/verify" },
   { label: "Developer API", href: "/developers" },
   { label: "Deal Room", href: "/deal-room", badge: "[ 1 PENDING ]" },
+  { label: "Tokenized Vault", href: "/dashboard/vault" },
   {
     label: "Ledger Explorer",
     href: `https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}`,
