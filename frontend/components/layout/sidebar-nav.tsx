@@ -7,6 +7,7 @@ interface NavLink {
   label: string;
   href: string;
   external?: boolean;
+  badge?: string;
 }
 
 const CONTRACT_ID = "CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK";
@@ -15,6 +16,7 @@ const NAV_LINKS: NavLink[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Verify Ledger", href: "/verify" },
   { label: "Developer API", href: "/developers" },
+  { label: "Deal Room", href: "/deal-room", badge: "[ 1 PENDING ]" },
   {
     label: "Ledger Explorer",
     href: `https://stellar.expert/explorer/testnet/contract/${CONTRACT_ID}`,
@@ -23,13 +25,13 @@ const NAV_LINKS: NavLink[] = [
 ];
 
 const ROW =
-  "flex min-w-0 flex-1 items-center justify-center gap-1 border-r border-black px-2 py-3 text-center font-mono text-[11px] uppercase tracking-normal transition-colors duration-100 last:border-r-0 md:flex-none md:justify-between md:border-r-0 md:border-b md:px-6 md:py-4 md:text-xs md:tracking-widest md:last:border-b-0";
+  "flex shrink-0 items-center gap-2 whitespace-nowrap border-r border-black px-4 py-3 font-mono text-xs uppercase tracking-widest transition-colors duration-100 md:w-full md:shrink md:justify-between md:whitespace-normal md:border-r-0 md:border-b md:px-6 md:py-4 md:last:border-b-0";
 
 export function SidebarNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex border-b border-black md:flex-col md:border-b-0">
+    <nav className="flex overflow-x-auto border-b border-black md:flex-col md:overflow-visible md:border-b-0">
       {NAV_LINKS.map((link) => {
         if (link.external) {
           return (
@@ -40,8 +42,8 @@ export function SidebarNav() {
               rel="noopener noreferrer"
               className={`${ROW} bg-white text-black hover:bg-black hover:text-white`}
             >
-              <span className="min-w-0 break-words">{link.label}</span>
-              <span aria-hidden className="shrink-0">↗</span>
+              <span>{link.label}</span>
+              <span aria-hidden>↗</span>
             </a>
           );
         }
@@ -57,12 +59,13 @@ export function SidebarNav() {
                 : "bg-white text-black hover:bg-black hover:text-white"
             }`}
           >
-            <span className="min-w-0 break-words">{link.label}</span>
-            {isActive && (
-              <span aria-hidden className="shrink-0">
-                →
+            <span>{link.label}</span>
+            {link.badge && (
+              <span className="shrink-0 whitespace-nowrap border border-current px-1.5 py-0.5 text-[10px] tracking-normal">
+                {link.badge}
               </span>
             )}
+            {isActive && <span aria-hidden>→</span>}
           </Link>
         );
       })}
