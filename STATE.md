@@ -535,6 +535,48 @@ on return, and mobile screenshots re-taken after each of the two nav
 fixes above to confirm by eye, not just by assertion, that nothing
 clips or overlaps.
 
+**Session 12 — Tokenized Asset Vault (2026-07-15)**
+New route `frontend/app/(platform)/dashboard/vault/page.tsx` — placed
+under the existing `dashboard/` folder inside the `(platform)` group
+specifically so the URL is the literal `/dashboard/vault` the task
+asked for, while still inheriting the persistent sidebar. Sidebar
+gained a sixth link, "Tokenized Vault" (no badge, unlike Deal Room —
+nothing here is "pending").
+
+`components/vault/` holds two static (server-rendered, no client JS)
+pieces: `protocol-metrics.tsx`, a stark 3-column grid (divide-x on
+desktop, stacks with divide-y on mobile) for the mock protocol-level
+numbers (`$142,500,000` total value anchored, `34` active contracts,
+`Soroban Testnet`), and `asset-ledger.tsx`, a heavy-bordered table
+listing the three mock tokenized assets with head/tail-truncated
+56-character contract-ID-shaped token IDs (`truncateMiddle`, same
+helper as every other table in the app) and a `[ View Hash ]` link per
+row styled as a bordered terminal link. The link is a real Next.js
+`Link` to `/verify` (not a dead `<span>` — the task said "in theory
+would route," which a genuine same-app navigation satisfies more
+honestly than a non-interactive mock). Table uses the same
+`min-w-[760px]` + `overflow-x-auto` + `whitespace-nowrap` pattern
+`pending-queue.tsx` landed on in Session 11 specifically to avoid that
+session's mid-word mobile wrapping bug — applied here from the start
+rather than re-discovered.
+
+Page-level header block (`// Tokenized Vault` eyebrow + `Asset Vault`
+h1, `border-b px-6 py-10 md:px-10`) intentionally copies Deal Room's
+header markup byte-for-byte rather than extracting a shared component,
+consistent with this codebase's established pattern of small,
+duplicated per-feature header blocks (`verification-ledger.tsx`,
+`developers/section-header.tsx`, Deal Room's own page) over a
+cross-feature abstraction for a ~6-line block.
+
+Verified for real: typecheck/lint/build clean (`/dashboard/vault`
+compiles fully static at 176 B, no client JS needed since nothing on
+the page is interactive beyond native `<Link>` navigation); Playwright
++ system Chrome confirmed all three metrics, all three table rows'
+exact name/token-ID/TVL text, and — not just that the View Hash button
+rendered — that clicking it actually navigates to `/verify` and lands
+on the real portal. Desktop and mobile screenshots confirmed the
+padding matches Deal Room's and nothing clips at 390px.
+
 ## Not built yet
 
 - No auth, no backend.
