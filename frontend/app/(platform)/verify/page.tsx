@@ -5,7 +5,11 @@ export const metadata: Metadata = {
   title: "Verify — Axiom Protocol",
 };
 
-export default function VerifyPage() {
+interface VerifyPageProps {
+  searchParams: { hash?: string };
+}
+
+export default function VerifyPage({ searchParams }: VerifyPageProps) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6 py-24">
       <div className="mb-12 text-center">
@@ -19,7 +23,7 @@ export default function VerifyPage() {
           Query the Stellar Testnet ledger directly. No wallet required.
         </p>
       </div>
-      <VerifyPanel />
+      <VerifyPanel initialHash={searchParams.hash} />
     </div>
   );
 }

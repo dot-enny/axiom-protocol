@@ -9,8 +9,14 @@ type QueryState = "idle" | "loading" | "found" | "rejected";
 
 const HASH_PATTERN = /^[a-f0-9]{64}$/i;
 
-export function VerifyPanel() {
-  const [hashInput, setHashInput] = useState("");
+interface VerifyPanelProps {
+  initialHash?: string;
+}
+
+export function VerifyPanel({ initialHash }: VerifyPanelProps) {
+  const [hashInput, setHashInput] = useState(
+    () => initialHash?.trim().toLowerCase() ?? ""
+  );
   const [queryState, setQueryState] = useState<QueryState>("idle");
   const [record, setRecord] = useState<ComplianceRecord | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
