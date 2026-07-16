@@ -632,6 +632,91 @@ exercised for real.
 per this file's own numbering it's the 13th — logged here as Session
 13 to keep this document's sequence internally consistent.)
 
+**Session 14 — Wiring the Deal Room, Asset Vault, and Verify Portal to
+real ledger state (2026-07-16)**
+The three routes that were still on hardcoded mock data (Deal Room,
+Asset Vault, and the `/verify` portal's input) now all read/write
+through `useLedgerStore`, closing the loop end-to-end: anchor a
+document on `/dashboard` → it appears in the Deal Room queue and the
+Asset Vault → clicking either's `[ View Hash ]` lands on `/verify`
+with the hash already filled in.
+
+`deal-room-workspace.tsx` derives its `Deal[]` from
+`useLedgerStore()` records instead of one hardcoded `MOCK_DEAL` — per
+this session's explicit simplification option, every anchored record
+is treated as a deal awaiting multi-sig execution (issuer = the
+record's real address; auditor stays a fixed mock, since there's no
+real auditor concept yet). The "signed" state from the mock
+Sign & Execute flow (Session 11) is now a `Set<string>` of deal ids
+instead of a single boolean, so multiple deals can be independently
+executed; it's intentionally still local component state, not
+persisted — the multi-sig interaction itself remains a UI simulation,
+only the underlying documents are real now. Selecting a different
+queue row resets the execution log so a previous deal's lines don't
+bleed into the next. `pending-queue.tsx` gained an empty-state row
+(`[ NO PENDING DEALS. ANCHOR A DOCUMENT TO BEGIN. ]`) since an empty
+real ledger is now a reachable state, not just a hypothetical.
+
+`asset-ledger.tsx` similarly maps real records instead of the three
+hardcoded assets: `Asset Name` is the record's actual filename (the
+only real "name" data available), and `Token ID` (`TKN-XXXXXXXX`) and
+`TVL` are *deterministically* derived from the real hash (`hash.slice
+(0, 8)`, hex-parsed and mapped into a dollar range) — same hash always
+produces the same token ID/TVL, so the "unique financial asset"
+illusion survives reloads instead of re-randomizing every render. Same
+empty-state treatment as the Deal Room. Section A's protocol-level
+metrics (Total Value Anchored, Active Contracts, Network) were left
+as-is per the task's scope — only the Asset Ledger table was in scope
+for this wiring pass.
+
+Both `[ View Hash ]` links (Vault) and a new one added next to the
+Deal Room's Execution Detail heading now use Next's typed `Link`
+`href={{ pathname: "/verify", query: { hash } }}` rather than a plain
+string, landing on `/verify?hash=<realhash>`. `app/(platform)/verify
+/page.tsx` reads `searchParams.hash` (this makes the route dynamic —
+confirmed in the build output, `ƒ /verify` instead of `○`, expected
+and correct for a page that now depends on the query string) and
+passes it to `VerifyPanel` as `initialHash`, which seeds the input via
+`useState(() => initialHash?.trim().toLowerCase() ?? "")`. Deliberately
+pre-fills only, doesn't auto-submit the query — the task asked
+specifically to save the user from copy-pasting, not to remove the
+explicit "Query Ledger State" click.
+
+The sidebar's Deal Room badge, hardcoded to `[ 1 PENDING ]` since
+Session 11, was also wired to `useLedgerStore()` (`records.length`,
+hidden entirely at zero) — not explicitly requested by name, but
+leaving a fake, static "1 pending" badge sitting right next to
+freshly-real data would have directly contradicted this session's own
+goal of flawless data flow, and the fix was a few lines once
+`sidebar-nav.tsx` already needed the hook. The badge intentionally
+counts *all* anchored records, not just unexecuted deals — the
+executed/`signedIds` state lives only inside `DealRoomWorkspace`'s
+local state, not in any shared store the sidebar can see, and lifting
+it into one would be new persistent-state machinery for what's still
+an explicitly mocked interaction layer.
+
+Verified for real, in the same style as Session 13 (temporarily wiring
+the real `addRecord` behind a hidden debug trigger, since Freighter
+still isn't installed on this machine): confirmed the empty state on
+all three surfaces (and no sidebar badge) with a cleared ledger; seeded
+two real records and confirmed the sidebar badge read `[ 2 PENDING ]`;
+confirmed the Deal Room queue showed both with `Action Required`
+status, that opening one showed the real issuer address, and that its
+`[ View Hash ]` landed on `/verify` with a real 64-char hash pre-filled;
+confirmed the Vault showed both real filenames with correctly-formatted
+derived Token IDs/TVL, and that its `[ View Hash ]` pre-filled the
+*exact* same hash string as the source record (strict equality, not
+just "non-empty"); confirmed executing a deal still flips its status
+correctly and that the sidebar badge stays at 2 afterward (by design —
+see above); reverted the debug trigger and confirmed via `git diff`
+that `verification-workspace.tsx` has zero changes this session. One
+real bug caught and fixed *in the test script itself*, not the app: an
+early pass asserted table row counts immediately after `page.goto`
+without waiting for client hydration to replace the SSR empty-state
+render, which briefly races on `useSyncExternalStore`'s server
+snapshot — fixed by waiting for real content before counting, then
+re-ran to confirm all counts were correct all along.
+
 ## Not built yet
 
 - No auth, no backend.
