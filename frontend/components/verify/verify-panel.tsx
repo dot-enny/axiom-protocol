@@ -3,11 +3,18 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { AuditTrail } from "@/components/verify/audit-trail";
 import { queryVerifyProof, type ComplianceRecord } from "@/lib/soroban";
+import { getRecords } from "@/lib/useLedgerStore";
 
 type QueryState = "idle" | "loading" | "found" | "rejected";
 
 const HASH_PATTERN = /^[a-f0-9]{64}$/i;
+
+function findLocalRecord(hash: string): ComplianceRecord | null {
+  const local = getRecords().find((r) => r.hash === hash);
+  return local ? { issuer: local.issuer, timestampIso: local.timestamp } : null;
+}
 
 interface VerifyPanelProps {
   initialHash?: string;
@@ -37,7 +44,7 @@ export function VerifyPanel({ initialHash }: VerifyPanelProps) {
     setDetail(null);
 
     try {
-      const result = await queryVerifyProof(hash);
+      const result = (await queryVerifyProof(hash)) ?? findLocalRecord(hash);
       if (result) {
         setRecord(result);
         setQueryState("found");
@@ -45,6 +52,12 @@ export function VerifyPanel({ initialHash }: VerifyPanelProps) {
         setQueryState("rejected");
       }
     } catch (err) {
+      const local = findLocalRecord(hash);
+      if (local) {
+        setRecord(local);
+        setQueryState("found");
+        return;
+      }
       setDetail(err instanceof Error ? err.message : "Unknown error");
       setQueryState("rejected");
     }
@@ -112,6 +125,8 @@ export function VerifyPanel({ initialHash }: VerifyPanelProps) {
                 <p className="mt-1 font-mono text-sm">{record.timestampIso}</p>
               </div>
             </div>
+
+            <AuditTrail timestampIso={record.timestampIso} />
           </div>
         )}
 
