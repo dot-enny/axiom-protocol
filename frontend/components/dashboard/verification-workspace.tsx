@@ -15,6 +15,7 @@ import {
   submitSignedTransaction,
 } from "@/lib/soroban";
 import { downloadComplianceReceipt } from "@/lib/pdf";
+import { addRecord } from "@/lib/useLedgerStore";
 
 export type VerificationStatus = "idle" | "processing" | "done";
 
@@ -105,6 +106,7 @@ export function VerificationWorkspace() {
       await confirmTransaction(hash);
 
       appendLine("[SOROBAN] Anchor confirmed. Ledger state updated.");
+      addRecord({ filename: file.name, hash: file.hash, issuer: address });
       setAnchorResult({ timestampIso: new Date().toISOString() });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
