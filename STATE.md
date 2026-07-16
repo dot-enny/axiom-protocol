@@ -766,9 +766,89 @@ via the new local-state fallback (it was never really submitted to
 Testnet), the rejected state is unaffected and correctly shows no
 audit trail section, and zero console errors throughout.
 
+**Session 16 — Zero Mocks: a real headless anchoring API (2026-07-16)**
+`POST /api/v1/anchor` (`frontend/app/api/v1/anchor/route.ts`) is a
+genuinely functional Next.js Route Handler — the Developer Portal's
+`request.sh`/`response.json` mock (Session 10) now has a real backend
+behind the exact same shape, no mocking anywhere in the request path.
+`export const runtime = "nodejs"` is explicit, not assumed — this
+route touches `SERVER_SECRET_KEY` and `stellar-sdk`'s Node-only
+crypto/Buffer usage, neither of which belong anywhere near the Edge
+runtime.
+
+Request handling, in order: `Authorization` header must start with
+`Bearer ax_live_` (401 otherwise, per the task's literal "accept any
+token with this prefix" spec — this is not real per-key auth, just a
+format gate, and is documented as such below); body must parse as
+JSON (400); `hash` must be 64 lowercase-or-mixed hex chars (400);
+`issuer` must pass `StrKey.isValidEd25519PublicKey` (400) rather than
+a hand-rolled regex, since the SDK's own validator is authoritative
+for what a real Stellar address looks like.
+
+The interesting design decision was reconciling the task's request
+body (`hash` + an arbitrary client-supplied `issuer`) with how Soroban
+auth actually works: `anchor_proof`'s `issuer.require_auth()` can only
+be satisfied by a signature from *that* address's own key. The server
+holds exactly one key (`SERVER_SECRET_KEY`) and was never going to
+hold arbitrary third parties' keys, so `buildAnchorProofTransaction`
+in `lib/soroban.ts` was generalized to take an optional `issuerAddress`
+distinct from the signing `sourceAddress` (defaults to `sourceAddress`,
+so the existing client/Freighter call site is untouched) — the route
+signs with the server key as the transaction source, and passes the
+request's `issuer` straight through as the on-chain argument, exactly
+as the task specified. In practice this means the happy path requires
+`issuer` to equal the server's own public key; anything else traps,
+which Task 4 explicitly asked to handle gracefully anyway — verified
+both paths for real (below), not just the matching case. The contract
+itself has no admin/owner gating at all (re-read `contracts/src/lib.rs`
+to confirm before designing around it, not assumed) — "the admin
+account we used to deploy the contract" from Task 1 is a narrative
+framing, not an on-chain requirement, so any funded Testnet keypair
+works as `SERVER_SECRET_KEY`. The one already sitting in this
+machine's `.env.local` was verified funded and reused rather than
+replaced. A new committed `frontend/.env.example` documents both env
+vars (`.env.local` itself stays gitignored, so this is the actual
+"update the setup instructions" deliverable — a raw secret can't be
+committed).
+
+Errors are split by *where* they actually occurred, not lumped into
+one catch-all: simulation-stage failures (bad input, the write-once
+"hash already anchored" panic) return 400; submission/confirmation
+failures return 500. Confirmed on real traffic that this split isn't
+just tidy code — it's necessary, because Soroban's `require_auth`
+mismatch (mismatched `issuer`) does *not* always get caught by
+simulation the way a contract panic does; it can pass simulation and
+only fail when the ledger actually enforces auth at submission,
+surfacing as a 500 rather than a 400. This is a real, useful thing to
+know about this SDK/network combination, not a design flaw in the
+route — the failure is still caught cleanly either way.
+
+Verified for real, end-to-end, against live Testnet, with zero
+Freighter dependency (unlike nearly every other flow in this app, this
+one needed no browser wallet at all, so nothing here is "verified as
+thoroughly as this environment allows" — it's just verified):
+confirmed 401 on a missing/malformed `Authorization` header, 400 on a
+malformed hash, a malformed issuer address, and unparseable JSON;
+submitted a real anchor with a freshly-generated hash and the server's
+own address as issuer and got back a genuine `200` matching the exact
+mocked schema — then independently re-verified the write landed by
+calling `verify_proof` read-only from a separate throwaway script (not
+trusting the route's own success report), which returned the real
+issuer and timestamp; re-submitted the identical hash and confirmed
+the write-once panic traps cleanly as a 400 with the real Soroban
+diagnostic event log in the message; submitted with a mismatched
+`issuer` and confirmed it fails as a 500 at submission (see above);
+and replayed the Developer Portal's exact documented cURL body,
+including its extra `"network"` field (which the route correctly
+ignores, since only `hash`/`issuer` are contractually required), and
+got a real confirmed anchor back.
+
 ## Not built yet
 
-- No auth, no backend.
+- No real per-key auth or rate limiting on `/api/v1/anchor` — the
+  Bearer check only validates a token *shape* (`ax_live_` prefix), not
+  a real issued/revocable API key, and there's no persistence of which
+  key anchored what. Fine for this stage, not production-ready.
 - No contract unit tests yet.
 - Not tested against a real Freighter installation or a real browser
   signature popup (this machine doesn't have the extension) — the
