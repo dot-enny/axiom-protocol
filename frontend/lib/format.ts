@@ -13,3 +13,15 @@ export function formatTimestamp(iso: string): string {
   const min = pad(date.getUTCMinutes());
   return `${y}-${m}-${d} ${h}:${min} UTC`;
 }
+
+export function formatTimestampWithSeconds(iso: string): string {
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const y = date.getUTCFullYear();
+  const m = pad(date.getUTCMonth() + 1);
+  const d = pad(date.getUTCDate());
+  const h = pad(date.getUTCHours());
+  const min = pad(date.getUTCMinutes());
+  const s = pad(date.getUTCSeconds());
+  return `${y}-${m}-${d} ${h}:${min}:${s} UTC`;
+}
