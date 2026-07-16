@@ -717,6 +717,55 @@ render, which briefly races on `useSyncExternalStore`'s server
 snapshot — fixed by waiting for real content before counting, then
 re-ran to confirm all counts were correct all along.
 
+**Session 15 — Cryptographic Audit Trail (2026-07-16)**
+(Note: the user's brief called this "Session 12"; per this file's own
+sequence it's the 15th, logged as such for consistency, same as the
+Session 13 numbering note above.)
+
+A verified hash on `/verify` now renders a four-node vertical
+"Cryptographic Audit Trail" below the existing issuer/timestamp block,
+inside the same black `VERIFIED` panel — a new
+`components/verify/audit-trail.tsx`, a `<ol>` with a solid white left
+border and small square markers (`border border-white bg-black`,
+positioned to sit exactly on the border line) styled to match the
+dark terminal aesthetic already established by `TerminalConsole` /
+`ExecutionLog` elsewhere in the app. All four nodes' copy is exactly
+what the task specified (Origination/Protocol Escrow/Deal Room/Asset
+Vault, including the real deployed contract ID in node 2's subtext)
+and their timestamps are computed as fixed offsets from the verified
+record's real anchor timestamp — `-2min`, `+0`, `+5min`, `+6min` — via
+a new `formatTimestampWithSeconds` in `lib/format.ts` (the existing
+`formatTimestamp` only went to minute precision; this task specifically
+asked for `HH:MM:SS`, so a second formatter was added rather than
+changing the first and affecting every other table that already uses
+it).
+
+The task described the audit trail appearing "when a hash is
+successfully found (either via local state lookup or Soroban RPC)" —
+until now `/verify` only ever queried real Testnet RPC. `verify-panel
+.tsx` now falls back to `getRecords()` (from `useLedgerStore`) when the
+RPC lookup returns no match *or* throws, mapping the matching
+`AnchorRecord` into the same `ComplianceRecord` shape the RPC path
+already produced. This isn't just a testability convenience (though it
+is one, given Freighter still isn't installed here) — for records this
+browser anchored itself, showing "verified" from local knowledge even
+if the RPC round-trip is briefly slow or flaky is a genuine UX
+improvement, not a compromise.
+
+Verified for real, with unusually tight precision: seeded one real
+record via the same temporary-debug-trigger technique as Sessions 13
+(the trigger was added, exercised, then fully reverted — confirmed via
+`git diff` showing zero changes to `verification-workspace.tsx`), then
+had the test script independently compute all four expected
+`YYYY-MM-DD HH:MM:SS UTC` strings from that exact record's timestamp
+and assert each one appears verbatim in the rendered DOM — not "a
+timestamp is present" but "this exact string, for this exact offset."
+All four matched exactly. Also confirmed: the query-param auto-fill
+from Session 14 still seeds the input correctly, this hash resolves
+via the new local-state fallback (it was never really submitted to
+Testnet), the rejected state is unaffected and correctly shows no
+audit trail section, and zero console errors throughout.
+
 ## Not built yet
 
 - No auth, no backend.
