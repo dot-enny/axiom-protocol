@@ -577,14 +577,64 @@ rendered — that clicking it actually navigates to `/verify` and lands
 on the real portal. Desktop and mobile screenshots confirmed the
 padding matches Deal Room's and nothing clips at 390px.
 
+**Session 13 — Local ledger persistence (2026-07-16)**
+The Dashboard's "Recent Anchors" table is no longer static mock data —
+it now reflects the user's real anchoring history, persisted to
+`localStorage`. `frontend/lib/useLedgerStore.ts` is a small
+module-level store (not a Context/Provider, since `VerificationWorkspace`
+and `VerificationLedger` are server-rendered siblings under
+`app/(platform)/dashboard/page.tsx` and don't share a client subtree to
+wrap): a module-scoped `records` array plus a subscriber `Set`, exposed
+as three functions —
+- `addRecord({ filename, hash, issuer })` — synthesizes `id`
+  (`crypto.randomUUID()`) and `timestamp` (`new Date().toISOString()`),
+  prepends to the in-memory array, persists to `localStorage` under
+  `axiom.ledger.v1` (try/caught — private-browsing/quota failures
+  degrade to in-memory-only for that session rather than throwing),
+  and notifies subscribers.
+- `getRecords()` — plain synchronous read, for non-React call sites.
+- `useLedgerStore()` — wraps the above in `useSyncExternalStore` (React
+  18) so any component calling it re-renders the instant `addRecord`
+  fires elsewhere in the tree, with a stable empty-array
+  `getServerSnapshot` to avoid an SSR/hydration mismatch.
+
+`VerificationWorkspace`'s anchor success path now calls `addRecord`
+directly after `[SOROBAN] Anchor confirmed. Ledger state updated.` is
+logged — real filename, real SHA-256 hash, real connected wallet
+address, all already in hand at that point, no new plumbing needed to
+get them there. `VerificationLedger` is now `"use client"` (required,
+since `useSyncExternalStore` is a client-only hook) and renders
+`useLedgerStore()`'s records through the existing `LedgerRow` /
+`truncateMiddle` — unchanged — with a new `formatTimestamp` helper in
+`lib/format.ts` matching the old mock data's `"YYYY-MM-DD HH:MM UTC"`
+shape. Empty state renders the exact literal string the task
+specified: `[ NO LOCAL RECORDS FOUND. AWAITING INPUT. ]`, as a single
+full-width row rather than an empty table.
+
+Verified for real, including the one piece that's usually the weak
+link with `localStorage` state — cross-component reactivity without a
+reload: temporarily wired a hidden debug button into
+`VerificationWorkspace` that called the *real* `addRecord` (same
+import, same module instance) with fixed test data, confirmed via
+Playwright that the already-mounted `VerificationLedger` updated
+instantly with no reload, that `localStorage`'s JSON shape exactly
+matches `AnchorRecord`, that a second add stays newest-first with
+unique ids, and that both rows survive a real page reload — then
+reverted the debug button before finishing (confirmed via `git diff`
+that only the real one-line `addRecord` call in the success path
+remains). The Freighter-signing step itself still isn't drivable on
+this machine (same standing limitation as every session since 5), so
+the debug button substituted only for *that* — everything downstream
+of a successful anchor (the actual subject of this session) was
+exercised for real.
+
+(Note: the user's brief for this session was labeled "Session 10," but
+per this file's own numbering it's the 13th — logged here as Session
+13 to keep this document's sequence internally consistent.)
+
 ## Not built yet
 
 - No auth, no backend.
-- The Verification Ledger (on the `/dashboard` route) is still static
-  mock data — nothing there reads from Soroban yet. The public
-  `/verify` portal (Session 8) does read real ledger state now, but
-  it's a separate, purpose-built read path, not a wiring-up of the
-  existing ledger table.
 - No contract unit tests yet.
 - Not tested against a real Freighter installation or a real browser
   signature popup (this machine doesn't have the extension) — the
