@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useWallet } from "@/components/dashboard/wallet-context";
+import { useLedgerStore } from "@/lib/useLedgerStore";
 import { PendingQueue } from "@/components/deal-room/pending-queue";
 import { ExecutionDetail } from "@/components/deal-room/execution-detail";
 import { ExecutionLog } from "@/components/deal-room/execution-log";
@@ -18,35 +19,52 @@ export interface Deal {
 
 type View = "queue" | "detail";
 
-const MOCK_DEAL: Omit<Deal, "requiredSigs" | "status"> = {
-  id: "deal-1",
-  hash: "a7f3b9c1d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a2b4c6d8e0f2a4b6c8d0e2f4a6",
-  assetType: "Commercial Real Estate",
-  issuer: "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37",
-  auditor: "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ",
-};
-
+// No real auditor/counterparty-review system exists yet — every real
+// anchor is treated as a deal awaiting multi-sig execution, with a
+// fixed mock auditor, per this session's task spec.
+const MOCK_AUDITOR = "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ";
 const EXECUTE_DELAY_MS = 1200;
 
 export function DealRoomWorkspace() {
   const [view, setView] = useState<View>("queue");
-  const [counterpartySigned, setCounterpartySigned] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [signedIds, setSignedIds] = useState<Set<string>>(new Set());
   const [isExecuting, setIsExecuting] = useState(false);
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const { address } = useWallet();
+  const records = useLedgerStore();
 
-  const deal: Deal = {
-    ...MOCK_DEAL,
-    requiredSigs: counterpartySigned ? "3/3" : "2/3",
-    status: counterpartySigned ? "Escrow Locked & Anchored" : "Action Required",
-  };
+  const deals: Deal[] = useMemo(
+    () =>
+      records.map((record) => {
+        const signed = signedIds.has(record.id);
+        return {
+          id: record.id,
+          hash: record.hash,
+          assetType: "RWA Compliance Anchor",
+          issuer: record.issuer,
+          auditor: MOCK_AUDITOR,
+          requiredSigs: signed ? "3/3" : "2/3",
+          status: signed ? "Escrow Locked & Anchored" : "Action Required",
+        };
+      }),
+    [records, signedIds]
+  );
 
-  const handleSelect = useCallback(() => setView("detail"), []);
+  const selectedDeal = deals.find((deal) => deal.id === selectedId) ?? null;
+
+  const handleSelect = useCallback((dealId: string) => {
+    setSelectedId(dealId);
+    setTerminalLines([]);
+    setView("detail");
+  }, []);
+
   const handleBack = useCallback(() => setView("queue"), []);
 
   function handleExecute() {
-    if (counterpartySigned || isExecuting) return;
+    if (!selectedDeal || signedIds.has(selectedDeal.id) || isExecuting) return;
 
+    const dealId = selectedDeal.id;
     setIsExecuting(true);
     setTerminalLines((prev) => [
       ...prev,
@@ -58,22 +76,20 @@ export function DealRoomWorkspace() {
         ...prev,
         "[SOROBAN] Escrow locked. Anchor confirmed.",
       ]);
-      setCounterpartySigned(true);
+      setSignedIds((prev) => new Set(prev).add(dealId));
       setIsExecuting(false);
     }, EXECUTE_DELAY_MS);
   }
 
   return (
     <div className="border-b border-black">
-      {view === "queue" && (
-        <PendingQueue deals={[deal]} onSelect={handleSelect} />
-      )}
-      {view === "detail" && (
+      {view === "queue" && <PendingQueue deals={deals} onSelect={handleSelect} />}
+      {view === "detail" && selectedDeal && (
         <>
           <ExecutionDetail
-            deal={deal}
+            deal={selectedDeal}
             counterpartyAddress={address ?? "Not connected"}
-            counterpartySigned={counterpartySigned}
+            counterpartySigned={signedIds.has(selectedDeal.id)}
             isExecuting={isExecuting}
             onBack={handleBack}
             onExecute={handleExecute}

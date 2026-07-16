@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { SignatureRow } from "@/components/deal-room/signature-row";
 import { truncateMiddle } from "@/lib/format";
@@ -34,9 +35,17 @@ export function ExecutionDetail({
         <h2 className="mt-3 break-all text-2xl font-black tracking-tight md:text-3xl">
           {truncateMiddle(deal.hash, 10, 8)}
         </h2>
-        <p className="mt-1 font-mono text-xs uppercase tracking-widest text-slate-500">
-          {deal.assetType}
-        </p>
+        <div className="mt-2 flex items-center gap-4">
+          <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
+            {deal.assetType}
+          </p>
+          <Link
+            href={{ pathname: "/verify", query: { hash: deal.hash } }}
+            className="border border-black px-2 py-1 font-mono text-xs uppercase tracking-widest transition-colors duration-100 hover:bg-black hover:text-white"
+          >
+            {"[ View Hash ]"}
+          </Link>
+        </div>
       </div>
 
       <div>

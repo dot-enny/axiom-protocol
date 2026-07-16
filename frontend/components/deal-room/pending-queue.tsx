@@ -29,20 +29,31 @@ export function PendingQueue({ deals, onSelect }: PendingQueueProps) {
           </tr>
         </thead>
         <tbody className="divide-y divide-black">
-          {deals.map((deal) => (
-            <tr
-              key={deal.id}
-              onClick={() => onSelect(deal.id)}
-              className="cursor-pointer transition-colors duration-100 hover:bg-black hover:text-white"
-            >
-              <td className="px-6 py-4 md:px-10">
-                {truncateMiddle(deal.hash, 5, 4)}
+          {deals.length === 0 ? (
+            <tr>
+              <td
+                colSpan={4}
+                className="px-6 py-6 font-mono text-xs uppercase tracking-widest text-slate-500 md:px-10"
+              >
+                {"[ NO PENDING DEALS. ANCHOR A DOCUMENT TO BEGIN. ]"}
               </td>
-              <td className="px-6 py-4">{deal.assetType}</td>
-              <td className="px-6 py-4">{deal.requiredSigs}</td>
-              <td className="px-6 py-4 font-bold">{deal.status}</td>
             </tr>
-          ))}
+          ) : (
+            deals.map((deal) => (
+              <tr
+                key={deal.id}
+                onClick={() => onSelect(deal.id)}
+                className="cursor-pointer transition-colors duration-100 hover:bg-black hover:text-white"
+              >
+                <td className="px-6 py-4 md:px-10">
+                  {truncateMiddle(deal.hash, 5, 4)}
+                </td>
+                <td className="px-6 py-4">{deal.assetType}</td>
+                <td className="px-6 py-4">{deal.requiredSigs}</td>
+                <td className="px-6 py-4 font-bold">{deal.status}</td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
