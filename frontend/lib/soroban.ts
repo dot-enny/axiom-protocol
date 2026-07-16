@@ -42,10 +42,17 @@ function getContractId(): string {
  * Builds an unsigned `anchor_proof` invocation against the real deployed
  * contract, using the account's actual on-chain sequence number (fetched
  * live from the Testnet RPC — no placeholder account data anymore).
+ *
+ * `sourceAddress` pays the fee and signs the envelope; `issuerAddress`
+ * (defaults to `sourceAddress`) is the on-chain `issuer` argument whose
+ * `require_auth()` must be satisfied. They differ only for the
+ * server-signed API route, where the server's own key can't satisfy a
+ * third party's auth — see `app/api/v1/anchor/route.ts`.
  */
 export async function buildAnchorProofTransaction(
   sourceAddress: string,
-  hash: string
+  hash: string,
+  issuerAddress: string = sourceAddress
 ): Promise<Transaction> {
   const account = await server.getAccount(sourceAddress);
   const contract = new Contract(getContractId());
@@ -58,7 +65,7 @@ export async function buildAnchorProofTransaction(
       contract.call(
         "anchor_proof",
         nativeToScVal(hash),
-        Address.fromString(sourceAddress).toScVal()
+        Address.fromString(issuerAddress).toScVal()
       )
     )
     .setTimeout(30)
