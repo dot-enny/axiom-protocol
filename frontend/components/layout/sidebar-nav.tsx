@@ -2,21 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useLedgerStore } from "@/lib/useLedgerStore";
 
 interface NavLink {
   label: string;
   href: string;
   external?: boolean;
-  badge?: string;
 }
 
 const CONTRACT_ID = "CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK";
+const DEAL_ROOM_HREF = "/deal-room";
 
 const NAV_LINKS: NavLink[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Verify Ledger", href: "/verify" },
   { label: "Developer API", href: "/developers" },
-  { label: "Deal Room", href: "/deal-room", badge: "[ 1 PENDING ]" },
+  { label: "Deal Room", href: DEAL_ROOM_HREF },
   { label: "Tokenized Vault", href: "/dashboard/vault" },
   {
     label: "Ledger Explorer",
@@ -30,6 +31,8 @@ const ROW =
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const records = useLedgerStore();
+  const pendingCount = records.length;
 
   return (
     <nav className="flex overflow-x-auto border-b border-black md:flex-col md:overflow-visible md:border-b-0">
@@ -50,6 +53,10 @@ export function SidebarNav() {
         }
 
         const isActive = pathname === link.href;
+        const badge =
+          link.href === DEAL_ROOM_HREF && pendingCount > 0
+            ? `[ ${pendingCount} PENDING ]`
+            : null;
         return (
           <Link
             key={link.href}
@@ -61,9 +68,9 @@ export function SidebarNav() {
             }`}
           >
             <span>{link.label}</span>
-            {link.badge && (
+            {badge && (
               <span className="shrink-0 whitespace-nowrap border border-current px-1.5 py-0.5 text-[10px] tracking-normal">
-                {link.badge}
+                {badge}
               </span>
             )}
             {isActive && <span aria-hidden>→</span>}
