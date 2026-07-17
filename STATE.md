@@ -1388,6 +1388,65 @@ chunks on `page.reload()` even though a fresh `curl` to it looked
 fine; killed it and started a genuinely fresh process before
 re-verifying. `tsc --noEmit` and `next build` both pass clean.
 
+**Session 25 — Smart contract error-handling translation (2026-07-17)**
+Raw Soroban/WASM failures no longer leak a stack trace or RPC
+diagnostic dump into the terminal — they're translated into clean,
+monochrome institutional alerts before they ever reach `appendLine`.
+
+- `frontend/lib/soroban.ts` — new `translateContractError(err)`. Maps
+  a real duplicate-hash panic to `[REJECTED] CRYPTOGRAPHIC ATTESTATION
+  COLLISION // PROOF ALREADY EXISTS ON LEDGER. STATE IMMUTABILITY
+  PRESERVED.`, and network/timeout/gas-shaped failures to `[FAILURE]
+  INSUFFICIENT GAS OR NETWORK TIMEOUT // SOROBAN RPC TRANSIT
+  INTERRUPTED.`. Anything matching neither — e.g. the user just
+  declining the Freighter signature prompt — returns `null` so the
+  caller keeps its own real message instead of a mislabeled one.
+- `frontend/components/dashboard/verification-workspace.tsx` —
+  `runAnchor`'s catch block (the actual anchoring function's real
+  try/catch) calls `translateContractError` first and only falls back
+  to the old raw `[ERROR] Transaction failed: ...` line when it
+  returns `null`.
+- `frontend/components/dashboard/terminal-console.tsx` — lines
+  starting with `[REJECTED]` or `[FAILURE]` now render as a bold
+  black-on-white, black-bordered box instead of plain white terminal
+  text, so a translated alert visually stands out from routine
+  `[SYSTEM]`/`[NETWORK]`/`[SOROBAN]` log lines without using any red —
+  purely monochrome, consistent with the rest of the brutalist UI.
+
+**A real bug was caught and fixed after initial "verification" missed
+it**: the first pass matched the duplicate-hash signature against the
+literal string `"hash already anchored"` — the contract's Rust panic
+text (`contracts/src/lib.rs`) — reasoning it would surface inside the
+RPC's diagnostic event dump. It doesn't. The release WASM build strips
+custom panic strings for binary size, so a real duplicate-hash call
+never contains that text at all. This was only caught because the user
+reported seeing `[FAILURE] ... NETWORK TIMEOUT` for a file that was
+already anchored — confirmed by reproducing it for real against
+Testnet (not just re-reading the code): anchored a hash twice with a
+funded throwaway account via a scratch Node script hitting the real
+RPC, and captured the actual thrown error text:
+`HostError: Error(WasmVm, InvalidAction)` with diagnostic event data
+`"VM call trapped: UnreachableCodeReached"` — no trace of the original
+message. Since `anchor_proof` is the contract's only panic path
+(`verify_proof` never panics, and every other input is validated
+client-side before submission), that generic VM-trap signature is, in
+practice, always the duplicate-hash case for this contract, so
+`DUPLICATE_HASH_SIGNATURE` now matches on
+`UnreachableCodeReached|VM call trapped|Error\(WasmVm,\s*InvalidAction\)`
+(keeping the literal string match too, in case a future build ever
+does include it), checked *before* the generic network/gas signature
+so it takes priority. Re-verified the corrected regex against the real
+captured error text plus the existing timeout/network/unrelated cases
+— all classify correctly now.
+
+The rendering itself (bold black-on-white boxed alert in
+`TerminalConsole`, distinct from plain log lines, no red) was verified
+in a real browser via the established temporary-debug-hook pattern — a
+`window.__debugAppendLine` hook calling the workspace's real
+`appendLine`, screenshotted, then fully removed and confirmed gone via
+`git diff` and a repo-wide grep. `tsc --noEmit` and `next build` both
+pass clean.
+
 ## Not built yet
 
 - No real per-key auth or rate limiting on `/api/v1/anchor` — the
