@@ -90,6 +90,14 @@ export function VerificationWorkspace() {
 
   const handleSequenceComplete = useCallback(() => setStatus("done"), []);
 
+  function handleClear() {
+    setFile(null);
+    setStatus("idle");
+    setTerminalLines([]);
+    setAnchorResult(null);
+    setPendingAnchor(false);
+  }
+
   const runAnchor = useCallback(
     async (issuerAddress: string, targetFile: VerifiedFile) => {
       setIsAnchoring(true);
@@ -177,6 +185,7 @@ export function VerificationWorkspace() {
           file={file}
           isAnchoring={isAnchoring}
           onFileDropped={handleFileDropped}
+          onClear={handleClear}
         />
         <TerminalConsole
           status={status}
