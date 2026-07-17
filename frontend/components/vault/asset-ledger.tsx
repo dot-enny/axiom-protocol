@@ -2,20 +2,13 @@
 
 import Link from "next/link";
 import { useLedgerStore } from "@/lib/useLedgerStore";
+import { calculateAssetValue, formatUsd } from "@/lib/format";
 
-// No real financial data exists per anchor yet, so the token ID and
-// TVL are deterministically derived from the real hash — same hash
-// always produces the same token ID/TVL, rather than being random on
-// every render, so the "unique financial asset" illusion holds up
-// across reloads.
+// No real token ID exists per anchor yet, so it's deterministically
+// derived from the real hash — same hash always produces the same
+// token ID, rather than being random on every render.
 function deriveTokenId(hash: string): string {
   return `TKN-${hash.slice(0, 8).toUpperCase()}`;
-}
-
-function deriveMockTvl(hash: string): string {
-  const seed = parseInt(hash.slice(0, 8), 16) || 0;
-  const value = 50_000 + (seed % 9_950_000);
-  return `$${value.toLocaleString("en-US")}`;
 }
 
 export function AssetLedger() {
@@ -55,7 +48,7 @@ export function AssetLedger() {
               <tr key={record.id}>
                 <td className="px-6 py-4 md:px-10">{record.filename}</td>
                 <td className="px-6 py-4">{deriveTokenId(record.hash)}</td>
-                <td className="px-6 py-4">{deriveMockTvl(record.hash)}</td>
+                <td className="px-6 py-4">{formatUsd(calculateAssetValue(record.hash))}</td>
                 <td className="px-6 py-4">
                   <Link
                     href={{ pathname: "/verify", query: { hash: record.hash } }}
