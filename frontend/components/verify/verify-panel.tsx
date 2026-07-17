@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AuditTrail } from "@/components/verify/audit-trail";
 import { queryVerifyProof, type ComplianceRecord } from "@/lib/soroban";
@@ -16,22 +17,17 @@ function findLocalRecord(hash: string): ComplianceRecord | null {
   return local ? { issuer: local.issuer, timestampIso: local.timestamp } : null;
 }
 
-interface VerifyPanelProps {
-  initialHash?: string;
-}
-
-export function VerifyPanel({ initialHash }: VerifyPanelProps) {
-  const [hashInput, setHashInput] = useState(
-    () => initialHash?.trim().toLowerCase() ?? ""
-  );
+export function VerifyPanel() {
+  const searchParams = useSearchParams();
+  const [hashInput, setHashInput] = useState("");
   const [queryState, setQueryState] = useState<QueryState>("idle");
   const [record, setRecord] = useState<ComplianceRecord | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const [formatWarning, setFormatWarning] = useState(false);
+  const hasAutoRun = useRef(false);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const hash = hashInput.trim().toLowerCase();
+  async function handleVerify(rawHash: string) {
+    const hash = rawHash.trim().toLowerCase();
 
     if (!HASH_PATTERN.test(hash)) {
       setFormatWarning(true);
@@ -61,6 +57,24 @@ export function VerifyPanel({ initialHash }: VerifyPanelProps) {
       setDetail(err instanceof Error ? err.message : "Unknown error");
       setQueryState("rejected");
     }
+  }
+
+  // Deep-link support: ?hash=... populates and auto-queries on first mount only,
+  // so it doesn't re-fire if the user edits the input afterward.
+  useEffect(() => {
+    if (hasAutoRun.current) return;
+    const urlHash = searchParams.get("hash");
+    if (!urlHash) return;
+    hasAutoRun.current = true;
+    const normalized = urlHash.trim().toLowerCase();
+    setHashInput(normalized);
+    void handleVerify(normalized);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    void handleVerify(hashInput);
   }
 
   const isLoading = queryState === "loading";

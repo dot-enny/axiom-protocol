@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { VerifyPanel } from "@/components/verify/verify-panel";
 
 export const metadata: Metadata = {
   title: "Verify — Axiom Protocol",
 };
 
-interface VerifyPageProps {
-  searchParams: { hash?: string };
-}
-
-export default function VerifyPage({ searchParams }: VerifyPageProps) {
+export default function VerifyPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6 py-24">
       <div className="mb-12 text-center">
@@ -23,7 +20,9 @@ export default function VerifyPage({ searchParams }: VerifyPageProps) {
           Query the Stellar Testnet ledger directly. No wallet required.
         </p>
       </div>
-      <VerifyPanel initialHash={searchParams.hash} />
+      <Suspense fallback={null}>
+        <VerifyPanel />
+      </Suspense>
     </div>
   );
 }
