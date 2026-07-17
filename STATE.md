@@ -1173,6 +1173,128 @@ Wallet".
 `tsc --noEmit` and a full `next build` pass with zero errors after all
 of the above.
 
+**Session 22 — Purge the "Generative AI template" aesthetic
+(2026-07-17)**
+A global CSS and structural sweep across the entire frontend, executed
+against four explicit constraints rather than a task-by-task feature
+brief. Touched roughly 40 files.
+
+*Typography.* `<body>` (`app/layout.tsx`) now sets `font-mono` instead
+of `font-sans` as the default — IBM Plex Mono was already wired to the
+`--font-mono` CSS variable and Tailwind's `mono` token since Session 3,
+it just wasn't the *default*; Archivo (`font-sans`) is still imported
+and available but no longer the fallback for un-annotated text. The
+one stray explicit `font-sans` override (`/verify`'s h1) was removed
+so it inherits the new default like every other page heading already
+did. `rounded-none` was already structurally guaranteed by
+`tailwind.config.ts`'s zeroed `borderRadius` scale (a grep for
+`rounded-(sm|md|lg|xl|2xl|3xl|full)` across the whole app returned
+zero hits — nothing to remove), but per the explicit task spec it's
+now also *stated* on the components a reader would think of as chrome
+— `Button`, `WalletModal`'s panel, both hash/API-key `<input>`s, and
+the verify-result/credential-box "card" panels — rather than resting
+entirely on the invisible config override.
+
+*Hacker-terminal decoration.* Removed every decorative `//`-prefixed
+UI label (`// Tokenized Vault`, `// Deal Room`, `// Ledger`, the
+reusable `SectionHeader`'s `` `// ${label}` ``, `AuditTrail`'s
+`// Cryptographic Audit Trail`, all four landing-page `// 0N` section
+eyebrows) and every `> `-prefixed terminal log line
+(`TerminalConsole`, `ExecutionLog`). Two different replacements,
+depending on shape: a simple label-above-heading eyebrow (most page
+headers) became a bordered inline tag — `<p className="inline-block
+border border-black px-2 py-1 ...">Label</p>` — while the four
+landing-page numbered sections (`01`–`04`, which are a literal
+numbered sequence, not just a label) got the task's literal example
+structure: a bordered flex row with the number as a filled badge
+flush against the heading (`<div className="flex border-b-2
+border-black"><span className="bg-black text-white ...">01</span>
+<h2>...</h2></div>`), color-inverted on `TerminalCta`'s black-background
+section. Terminal log empty-states became `[ AWAITING INPUT ]` /
+`[ AWAITING EXECUTION ]`, matching the bracket convention already used
+by every other empty-state in the app, rather than a slash comment.
+`WalletModal`'s `"AUTHORIZATION REQUIRED // CONNECT WALLET"` header
+became an em dash, since it's a compact single-line header, not a
+section eyebrow — the block-badge treatment didn't fit that shape.
+Deliberately left alone: the `//` inside `api-docs.tsx`'s
+`REQUEST_EXAMPLE`/`RESPONSE_EXAMPLE` strings and `terminal-cta.tsx`'s
+code snippet — those are literal `curl`/JS comment syntax inside
+illustrative code content a developer would copy, not decorative UI
+chrome, and stripping them would make the example look like invalid
+code. Also left alone: the single `/` divider in the hero's eyebrow
+(`Compliance Infrastructure / Stellar Soroban Network`) and the
+sidebar's `→`/`↗` Unicode arrows — the task named `//`, `///`, and a
+bare `>` specifically; a single slash and non-ASCII arrow glyphs are a
+different, non-hacker-trope convention already established elsewhere
+in this design system.
+
+*Absolute monochrome.* Every `text-slate-{300,400,500,600}`,
+`bg-slate-*`, and `border-slate-*` in the app — confirmed zero
+`gray-*`/`zinc-*` usage existed to begin with — is gone (~85
+occurrences across ~35 files). The conversion rule depended on
+context, not a blind find-replace: label-style text that was already
+`text-xs uppercase tracking-widest` (the large majority) just lost the
+color class outright, inheriting black; body-prose paragraphs (hero
+tagline, footer description, landing card descriptions) lost the
+color but kept their existing size rather than being forced into
+all-caps label styling, since forcing a full sentence into
+`uppercase` would hurt readability for no stated benefit — the task's
+"e.g. text-xs uppercase" was read as an illustrative technique for
+labels, not a mandate to shrink every sentence in the app; and
+anything living inside a `bg-black` panel (`AuditTrail`, the verify
+"found" panel, `TerminalConsole`, `ExecutionLog`, `api-docs.tsx`'s
+`CodeBlock`, `TerminalWindow`) had its dimmed `slate` swapped for
+plain `text-white` instead of `text-black`, since black-on-black is
+invisible — same "no gray" principle, mirrored for a dark background.
+One intentional, narrow exception: the hash input's
+`placeholder:text-black/40` uses an alpha-blended black rather than a
+gray Tailwind token, since an opaque-black placeholder would be
+visually indistinguishable from real typed input — this doesn't
+violate the letter of the rule (no `gray`/`slate`/`zinc` class used)
+and is the only place a translucency technique was judged necessary
+for basic usability.
+
+*Logo.* Replaced the plain-text "AXIOM" / "AXIOM PROTOCOL" wordmark in
+all three places it appears (`AppSidebar`, `Navbar`, `Footer`) with
+the stark two-tone stamped block from the task spec — a
+`border-2 border-black` box with a filled black "AXIOM" chip flush
+against a white-bg "PROTOCOL" chip. Sized down (`px-2`/`text-[10px]`
+vs. the landing page's `px-3`/`text-sm`) specifically in the
+platform sidebar, since that context is a fixed 256px-wide column
+sharing its header row with a "Console" label — confirmed by direct
+DOM measurement (not guesswork, after Session 21's sidebar-collapse
+bug taught the lesson that "looks fine at a glance" isn't proof) that
+the full-size version plus "Console" would have been too wide for
+that row, then verified the actual rendered logo fits on one line at
+that width via a real screenshot.
+
+Also updated `.clauderules` itself — the design-system section
+previously said "Monochromatic (black, white, slate)"; slate is no
+longer sanctioned, and the corner-mark/no-hacker-trope/logo rules
+above are now written into the rules file directly so a future session
+doesn't reintroduce any of this by default.
+
+Verified for real, not just by code review: `grep` swept the entire
+frontend for `slate-\d+|gray-\d+|zinc-\d+` and for the decorative
+`//`/`>` JSX-string patterns after every edit — both returned zero
+matches at the end. `tsc --noEmit` and a full `next build` both pass
+with zero errors. Took full-page screenshots in a real browser (Chrome
+via Playwright) of the landing page, dashboard, vault, deal room
+(queue and detail view, with real seeded signature rows), developer
+portal, the verify portal's "found" state (dark panel + full Audit
+Trail), and the Wallet Modal (bracket-only icons, no border box,
+"Coming Soon" tags) — confirmed every one is monochrome, square-
+cornered, slash-free, and that the new stamped logo fits cleanly at
+every width tested, including the constrained sidebar. One real
+pre-existing quirk noticed and *not* fixed (out of scope for this
+sweep): the landing page's `SnapIn` `whileInView` reveal animation
+means a full-page screenshot taken without actually scrolling shows a
+blank gap where below-the-fold content hasn't triggered its reveal
+yet — confirmed via DOM text search that the content is genuinely
+present, and via a scroll-through screenshot that it renders correctly
+once revealed. Not a regression from this session, not a hacker-trope
+or color issue, so left alone.
+
 ## Not built yet
 
 - No real per-key auth or rate limiting on `/api/v1/anchor` — the
