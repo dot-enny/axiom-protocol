@@ -1336,6 +1336,58 @@ stale dev-server process on port 3000 serving 404s for its own static
 chunks — killed it and started a clean one before testing. `tsc
 --noEmit` and `next build` both pass clean.
 
+**Session 24 — Direct Block Explorer links (2026-07-17)**
+Every anchor's real Stellar transaction hash is now captured, persisted,
+and surfaced as a clickable link straight to Stellar Expert, both from
+the dashboard ledger and from the Verify portal's Audit Trail.
+
+- `frontend/app/api/v1/anchor/route.ts` — the confirmed transaction
+  hash is now also returned under an explicit `txHash` key (alongside
+  the pre-existing `id` field, kept for backward compat with the
+  documented response shape) for headless API callers.
+- `frontend/components/dashboard/verification-workspace.tsx` — the
+  actual UI anchoring path doesn't go through that API route at all;
+  it signs and submits directly via Freighter (`runAnchor`,
+  `lib/soroban.ts`'s `submitSignedTransaction`), which already returns
+  the real tx hash. That value is now passed into `addRecord(...
+  txHash)` instead of being discarded — this was the real gap, since
+  the dashboard ledger is populated from this path, not the API route.
+- `frontend/lib/useLedgerStore.ts` — `AnchorRecord` gained an optional
+  `txHash?: string`, persisted to `localStorage` like every other
+  field.
+- `frontend/lib/soroban.ts` — `ComplianceRecord` gained an optional
+  `txHash?: string` so the Verify portal can carry it through;
+  `queryVerifyProof` (pure on-chain lookup) never sets it, since the
+  contract's `anchor_proof` state doesn't store the submitting
+  transaction's own hash — only locally-anchored records (found via
+  `findLocalRecord`) have one.
+- `frontend/components/dashboard/ledger-row.tsx` +
+  `verification-ledger.tsx` — added a 4th "Transaction" column; when a
+  row has a `txHash` it renders a bordered `[ TX ]` link to
+  `https://stellar.expert/explorer/testnet/tx/${txHash}`
+  (`target="_blank" rel="noopener noreferrer"`, hover-invert to
+  black/white); rows anchored before this session (no `txHash`) show a
+  plain `—`.
+- `frontend/components/verify/audit-trail.tsx` — "NODE 2: PROTOCOL
+  ESCROW" now renders an extra "View on Ledger: [ txHash truncated ]"
+  line (same `target`/`rel` and hover-invert treatment, colors flipped
+  for the black panel) only when a `txHash` is available, so a
+  pure-chain verification (no local record) doesn't show a broken or
+  missing link.
+
+Verified for real in a live browser (Playwright + system Chrome):
+seeded a `localStorage` record with a `txHash`, confirmed the
+dashboard's `[ TX ]` link has the correct `href`/`target`/`rel` and
+visually inverts on hover; confirmed the same record's Verify-portal
+deep link renders "View on Ledger" with a working link to the same
+URL; confirmed a record with no `txHash` renders `—` in the ledger
+instead of a broken link or crash. Also hit and diagnosed a second
+stale-dev-server symptom this session — a `next dev` process left
+running from before these edits started serving 404s for its own
+chunks on `page.reload()` even though a fresh `curl` to it looked
+fine; killed it and started a genuinely fresh process before
+re-verifying. `tsc --noEmit` and `next build` both pass clean.
+
 ## Not built yet
 
 - No real per-key auth or rate limiting on `/api/v1/anchor` — the
