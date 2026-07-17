@@ -28,6 +28,7 @@ const READ_ONLY_SOURCE = Keypair.random().publicKey();
 export interface ComplianceRecord {
   timestampIso: string;
   issuer: string;
+  txHash?: string;
 }
 
 function getContractId(): string {

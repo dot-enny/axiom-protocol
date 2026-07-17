@@ -11,6 +11,7 @@ export interface AnchorRecord {
   hash: string;
   issuer: string;
   timestamp: string;
+  txHash?: string;
 }
 
 type Listener = () => void;

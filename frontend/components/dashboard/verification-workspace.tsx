@@ -111,14 +111,15 @@ export function VerificationWorkspace() {
         }
 
         appendLine("[NETWORK] Submitting to Stellar Testnet...");
-        const hash = await submitSignedTransaction(signResult.signedTxXdr);
-        await confirmTransaction(hash);
+        const txHash = await submitSignedTransaction(signResult.signedTxXdr);
+        await confirmTransaction(txHash);
 
         appendLine("[SOROBAN] Anchor confirmed. Ledger state updated.");
         addRecord({
           filename: targetFile.name,
           hash: targetFile.hash,
           issuer: issuerAddress,
+          txHash,
         });
         setAnchorResult({ timestampIso: new Date().toISOString() });
       } catch (err) {
