@@ -8,14 +8,21 @@ const WRAPPER = "md:mx-6 md:mb-6";
 const FREIGHTER_URL = "https://www.freighter.app/";
 
 export function WalletConnector() {
-  const { state, address, error, isWalletMissing, connect } = useWallet();
+  const { state, address, error, isWalletMissing, connect, disconnect } =
+    useWallet();
 
   if (state === "connected" && address) {
     return (
-      <div
-        className={`border border-black px-4 py-2 text-center font-mono text-xs uppercase tracking-widest md:py-3 ${WRAPPER}`}
-      >
-        {truncateMiddle(address, 4, 4)}
+      <div className={WRAPPER}>
+        <div className="border border-black px-4 py-2 text-center font-mono text-xs uppercase tracking-widest md:py-3">
+          {truncateMiddle(address, 4, 4)}
+        </div>
+        <button
+          onClick={disconnect}
+          className="mt-2 w-full font-mono text-[11px] uppercase tracking-widest text-slate-500 transition-colors duration-100 hover:text-black"
+        >
+          Disconnect
+        </button>
       </div>
     );
   }
