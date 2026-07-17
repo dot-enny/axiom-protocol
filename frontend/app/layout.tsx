@@ -29,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${archivo.variable} ${plexMono.variable}`}>
-      <body className="bg-white text-black font-sans antialiased">
+      <body className="bg-white text-black font-mono antialiased">
         {children}
       </body>
     </html>
