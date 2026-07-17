@@ -926,6 +926,77 @@ then re-rendered and visually confirmed the fix (border, caption, and
 QR code all sit cleanly in the bottom-right corner with no overlap).
 `npx tsc --noEmit` and a full `next build` both pass with zero errors.
 
+**Session 19 — Deterministic mock signers close out Zero Mocks
+(2026-07-17)**
+The last hardcoded wallet address in the app is gone. A new
+`frontend/lib/keys.ts` exports `generateMockStellarKey(hash, role)`: it
+hashes `${hash}:${role}` with a small FNV-1a mix into a 32-bit seed,
+feeds that into a `mulberry32` PRNG, and draws 55 characters from the
+same 32-symbol alphabet real Stellar keys use (`A-Z2-7`), prefixed with
+`G` — a 56-character string that looks exactly like a real public key
+(confirmed against `/^G[A-Z2-7]{55}$/`) without claiming to be a valid
+StrKey-checksummed one (it isn't, and doesn't need to be — "Mock" is in
+the name). Same hash + same role always produces the same string;
+different roles on the same hash, or the same role on a different
+hash, both produce different strings — this is the whole point, since
+it's what lets Party 2/3 have stable "identities" without a database.
+
+`deal-room-workspace.tsx` lost its `MOCK_AUDITOR` constant entirely.
+Every deal's `auditor` and new `counterparty` fields are now
+`generateMockStellarKey(record.hash, "auditor" | "counterparty")`.
+This also meant reconsidering what "Party 3" actually represents: it
+used to display the *actually connected* Freighter/raw-keypair wallet
+address (labeled "Counterparty / You"), which was itself a mild
+hardcoding smell — the same real address one connects with was being
+reused to play a pretend second signer. Per this session's explicit
+task spec, Party 1 (Issuer) is the only party that stays tied to a
+real address (`record.issuer`, the actual signer from the original
+anchor); Party 2 and 3 are now both deterministic mocks, and the
+`useWallet`/`address` plumbing that only existed to feed the old
+Party 3 display was removed from `deal-room-workspace.tsx` and
+`execution-detail.tsx` entirely — nothing else in the Deal Room needed
+it. The "Counterparty / You" role label is now just "Counterparty",
+since it no longer literally is the person clicking the button.
+`execution-detail.tsx`'s signing state/`onExecute` flow is untouched;
+only the *displayed* address for that row changed.
+
+`signature-row.tsx` now renders two versions of each address —
+`truncateMiddle(address, 6, 4)` (e.g. `GC5VAG…NLBQ`) shown only below
+the `sm` breakpoint, and the full 56-character address (`break-all`,
+as before) shown at `sm` and up — rather than a single always-wrapping
+string, so a 56-character monospace address doesn't dominate a phone
+screen while desktop still gets the complete, copyable value.
+
+Verified for real in a real browser (Chrome via Playwright), at both a
+1280px desktop viewport and a 375px mobile viewport, seeding
+`useLedgerStore`'s real `axiom.ledger.v1` localStorage key directly (no
+debug trigger needed — this session only touches read-side display):
+confirmed Party 1 showed the seeded record's real issuer address;
+confirmed Party 2 and Party 3 exactly matched a hand-computed reference
+implementation of `generateMockStellarKey` run standalone in Node
+against the same hash/role inputs (down to the exact 56-character
+string); confirmed re-selecting the same deal after navigating back to
+the queue produced the identical Party 2/3 addresses (determinism
+holds across remounts, not just within one render); confirmed the
+mobile viewport showed the 11-character truncated form
+(`GC5VAG…NLBQ`) for all three rows with zero horizontal page overflow,
+while the desktop viewport showed full untruncated addresses. `tsc
+--noEmit` and a full `next build` both pass with zero errors — the
+`/deal-room` route's First Load JS also dropped (6.25 kB → 3.35 kB)
+now that it no longer pulls in the wallet context.
+
+**The 'Zero Mocks' phase is now complete.** Every number, address, and
+record rendered anywhere in the app is either read from real Soroban
+Testnet state, derived from a real user-anchored record in
+`useLedgerStore`, or — where no real counterparty/valuation data can
+exist yet (mock auditor/counterparty signers, per-asset TVL, token
+IDs) — deterministically computed from that record's real hash rather
+than hardcoded or randomized. The remaining simulated pieces (the
+multi-sig "signing" interaction itself, per-asset TVL/token ID as a
+financial concept) are explicitly still UI simulations of workflows
+Axiom doesn't have real backing systems for, not stray mock data left
+over from earlier sessions.
+
 ## Not built yet
 
 - No real per-key auth or rate limiting on `/api/v1/anchor` — the
