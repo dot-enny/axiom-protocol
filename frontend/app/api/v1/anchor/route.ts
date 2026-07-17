@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         id: txHash,
+        txHash,
         status: "confirmed",
         hash: normalizedHash,
         ledger: {
