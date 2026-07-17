@@ -843,6 +843,44 @@ including its extra `"network"` field (which the route correctly
 ignores, since only `hash`/`issuer` are contractually required), and
 got a real confirmed anchor back.
 
+**Session 17 — Stateful Asset Vault metrics (2026-07-16)**
+Section A's protocol-level metrics on `/dashboard/vault`, explicitly
+left hardcoded in Session 14's scope note above, are now wired to
+`useLedgerStore` too — the Vault has zero remaining mock data.
+`calculateAssetValue(hash)` moved into `lib/format.ts` (alongside a new
+`formatUsd` helper) rather than living in the page file, since both
+`protocol-metrics.tsx` and `asset-ledger.tsx` need the exact same
+per-hash dollar figure and a shared source keeps them from silently
+drifting apart. It supersedes `asset-ledger.tsx`'s old
+Session-14-local `deriveMockTvl` (deleted, same hex-parse-into-a-range
+approach, now just centralized and widened from a $50k–$10M spread to
+the task's specified $1M–$25M).
+
+`protocol-metrics.tsx` is now a client component (`useLedgerStore()`)
+instead of a static array: **Active Contracts** is `records.length`
+directly; **Total Value Anchored** sums `calculateAssetValue` across
+every record and formats via `formatUsd`, correctly showing `$0` at
+zero records rather than the old hardcoded `$142,500,000`. **Network**
+stays a static `"Soroban Testnet"` label — there's no per-record
+network data to derive it from. The Asset Ledger table's existing TVL
+column (added in Session 14) now calls the shared `calculateAssetValue`
+instead of its own local copy; the Token ID column is untouched (no
+real per-asset token ID data exists yet, so it stays a hash-derived
+`TKN-XXXXXXXX` label, out of this session's scope).
+
+Verified for real in a real browser (Chrome via Playwright), seeding
+`useLedgerStore`'s real `axiom.ledger.v1` localStorage key directly
+rather than going through the debug-trigger pattern, since this
+session only touches read-side derivation, not `addRecord` itself:
+confirmed the empty-ledger state shows `$0` / `0` / the existing
+placeholder row; seeded two records with known hashes and confirmed
+both per-row TVLs and the summed Total Value Anchored metric matched a
+hand-computed `calculateAssetValue` reference implementation exactly
+(`$22,944,293` + `$1,065,297` = `$24,009,590`, both the table and the
+metrics panel agreed to the dollar); confirmed Active Contracts read
+`2`; cleared the seeded state afterward so it wouldn't linger in this
+machine's real local dev data. `tsc --noEmit` clean.
+
 ## Not built yet
 
 - No real per-key auth or rate limiting on `/api/v1/anchor` — the
