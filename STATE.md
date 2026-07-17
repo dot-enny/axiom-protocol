@@ -1054,6 +1054,125 @@ prior session); confirmed clicking `[ X ] CLOSE` removed the modal
 from the DOM. `tsc --noEmit` and a full `next build` both pass with
 zero errors.
 
+**Session 21 — Wallet Modal follow-up fixes (2026-07-17)**
+Two rounds of real-usage feedback on Session 20's Wallet Modal and the
+surrounding UI, all fixed and re-verified in a real browser:
+
+*Sidebar active-item collapse.* The Deal Room sidebar link wrapped its
+label onto two lines ("DEAL" / "ROOM") whenever it was both active
+*and* showing a pending-count badge. Measured it directly in the DOM
+rather than guessing: the label's unwrapped width (80.4375px) was
+sitting right at the edge of the space left after the badge and arrow
+(80.44px available) — a razor-thin fit that different sub-pixel
+rounding could tip either way, which is exactly why it looked fine in
+one screenshot and broken in another. The arrow is purely decorative
+(the active row already inverts to black), so it's now hidden whenever
+a badge is present (`isActive && !badge`), which removes ~27px of
+demand and stays robust regardless of how many digits the pending
+count grows to — not just a fix for the "3 pending" case that was
+actually reported.
+
+*Verification log growing indefinitely.* `TerminalConsole` used
+`min-h-[420px]`, a floor with no ceiling, so it grew taller with every
+appended line instead of behaving like a real terminal. Changed to a
+fixed `h-[420px]` with `overflow-y-auto` on the inner line list, plus
+an effect that scrolls to the bottom on every new line. Verified by
+temporarily wiring a hidden debug button that flooded 30 lines in
+(reverted after, confirmed via `grep` that no trace of it remains) —
+the panel height stayed exactly 420px throughout, the inner scroll
+area grew to a real 1052px `scrollHeight` against a 379px
+`clientHeight`, and it stayed auto-scrolled to the newest line.
+
+*Anchor doesn't auto-resume after connecting.* Clicking "Anchor" while
+disconnected now sets a `pendingAnchor` flag alongside opening the
+modal. A new effect watches `[pendingAnchor, address, file]` and fires
+the same `runAnchor` the button itself calls the moment `address`
+becomes non-null — so a successful connect resumes the exact anchor
+the user asked for with no second click. Guarded two edge cases: the
+modal's `onClose` only clears `pendingAnchor` if the user dismissed it
+*without* connecting (not when it auto-closes because a connection
+just succeeded — checked via `address` still being null at close
+time), and dropping a *different* file while the modal is open clears
+`pendingAnchor` too, so a stale intent can't auto-anchor a document the
+user never actually clicked "Anchor" for. `runAnchor` itself was
+extracted out of the click handler into a `useCallback` so both the
+click path and the resume-effect path call the identical pipeline.
+Verified end-to-end with the same temporary `window.__debugConnect`
+hook used in Session 20 (reverted after, `git diff` on
+`wallet-context.tsx` came back empty): confirmed the modal opened with
+zero pipeline lines added, then confirmed simulating a connection both
+auto-closed the modal *and* appended a fresh "[NETWORK] Simulating
+transaction payload..." line with no additional click.
+
+*Wallet Modal icon boxes.* An external edit between sessions had
+dropped the icon span's `w-9`, so `[ F ]` collapsed into two lines
+inside a now-non-square border box — fixed by restoring the square
+box initially, then a follow-up request asked to drop the border
+entirely and keep bracket-only text at the original `h-9` (not the
+`h-10` this session had briefly bumped it to). Also added a click-
+outside-to-close backdrop, a linear "snap" mount transition (matching
+`SnapIn`'s no-soft-easing philosophy, used here directly via
+`framer-motion` since this is a mount transition, not a scroll
+reveal), and a muted/non-interactive treatment for the Albedo/xBull
+rows so "not wired up yet" reads as visually distinct from
+"Freighter, which actually works."
+
+*Freighter detection duplication.* The modal's own timeout-raced
+`isConnected()` check was pulled out into a shared
+`isFreighterInstalled()` in `lib/wallet.ts`, so the exact same
+hang-proofing (a real SDK behavior documented in Session 20 — no
+extension means the promise never settles) isn't maintained in two
+places. `connectFreighterWallet()` was also switched to call this
+shared helper instead of raw `isConnected()`, closing the same latent
+"Connecting..." forever risk in the sidebar's own Connect button that
+Session 20 only fixed inside the modal.
+
+*Corner registration marks scrolled away.* `Frame`'s four `+` marks
+were `position: absolute` inside the normal-flow, scrolling frame
+container, so they scrolled off screen instead of staying put like a
+print crop mark. Switched to `position: fixed`, with the horizontal
+offset written as `max(0.25rem,calc((100vw-1440px)/2+0.25rem))` so
+they still land exactly on the frame's actual border corner (not the
+raw viewport edge) on screens wider than the `max-w-[1440px]` frame.
+Verified the top-left mark's `getBoundingClientRect().top` was
+identical (4px) before and after an 800px scroll, and that its left
+offset landed exactly 4px inside the frame's real border edge.
+
+*Can't drop a second document without a refresh.* `Dropzone` treated
+any non-`"idle"` status as busy, which included `"done"` — meaning a
+finished (or even successfully anchored) upload permanently blocked
+the next one. Narrowed to `status === "processing" || isAnchoring`
+(the hashing animation and an in-flight transaction are the only
+states where swapping `file` out from under the pipeline would be
+unsafe), added a "Drop another document to replace this one" hint, and
+made `handleFileDropped` clear `pendingAnchor` so a new drop can't
+inherit a stale wallet-modal intent from the previous file. Verified
+by dropping two different real files back-to-back in the same page
+load with no reload in between.
+
+*Wallet connection persistence and disconnect.* Freighter remembers
+per-site authorization on its own, so a page reload silently checking
+for that (via a new `checkExistingConnection()` — deliberately never
+calls `setAllowed()`, the interactive consent step, so a reload can't
+surface a permission popup out of nowhere) restores `connected` state
+without forcing a re-click. Guarded with the same timeout-raced
+`isFreighterInstalled()` so a machine with no extension at all still
+resolves to `disconnected` promptly instead of hanging the check
+forever — verified by reloading fresh and confirming "Connect Wallet"
+appears within the wait window, not stuck mid-check. A new
+`disconnect()` clears local state only; it does not and cannot revoke
+Freighter's own site permission (that's only done from inside the
+extension), so a later "Connect" click reconnects without a fresh
+prompt — this is standard dapp behavior, not a shortcut. Wired into
+the sidebar's `WalletConnector` as a small "Disconnect" link under the
+connected-address box. Verified via the same debug-hook pattern:
+confirmed the Disconnect link appears once connected, and that
+clicking it clears the address and reverts the sidebar to "Connect
+Wallet".
+
+`tsc --noEmit` and a full `next build` pass with zero errors after all
+of the above.
+
 ## Not built yet
 
 - No real per-key auth or rate limiting on `/api/v1/anchor` — the
