@@ -73,7 +73,10 @@ export function SidebarNav() {
                 {badge}
               </span>
             )}
-            {isActive && <span aria-hidden>→</span>}
+            {/* The badge already carries the active row's trailing content —
+                showing the arrow too pushes the label right to the edge of
+                the sidebar's available width, so it's one or the other. */}
+            {isActive && !badge && <span aria-hidden>→</span>}
           </Link>
         );
       })}

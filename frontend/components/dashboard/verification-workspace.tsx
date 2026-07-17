@@ -6,6 +6,7 @@ import { Networks } from "@stellar/stellar-sdk";
 import { Dropzone } from "@/components/dashboard/dropzone";
 import { TerminalConsole } from "@/components/dashboard/terminal-console";
 import { Button } from "@/components/ui/button";
+import { WalletModal } from "@/components/WalletModal";
 import { useWallet } from "@/components/dashboard/wallet-context";
 import { sha256Hex } from "@/lib/hash";
 import {
@@ -46,6 +47,11 @@ export function VerificationWorkspace() {
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
   const [isAnchoring, setIsAnchoring] = useState(false);
   const [anchorResult, setAnchorResult] = useState<AnchorResult | null>(null);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  // Set when "Anchor" is clicked with no wallet connected yet, so the
+  // pipeline can resume automatically once the modal's connect succeeds
+  // instead of making the user click "Anchor" a second time.
+  const [pendingAnchor, setPendingAnchor] = useState(false);
   const {
     address,
     state: walletState,
@@ -77,44 +83,73 @@ export function VerificationWorkspace() {
     setFile({ name: dropped.name, size: dropped.size, hash });
     setTerminalLines([]);
     setAnchorResult(null);
+    setPendingAnchor(false);
     setStatus("processing");
   }
 
   const handleSequenceComplete = useCallback(() => setStatus("done"), []);
 
-  async function handleAnchorClick() {
-    if (!file || !address || isAnchoring) return;
+  const runAnchor = useCallback(
+    async (issuerAddress: string, targetFile: VerifiedFile) => {
+      setIsAnchoring(true);
 
-    setIsAnchoring(true);
+      try {
+        appendLine("[NETWORK] Simulating transaction payload...");
+        const unsignedTx = await buildAnchorProofTransaction(
+          issuerAddress,
+          targetFile.hash
+        );
+        const preparedTx = await prepareAnchorProofTransaction(unsignedTx);
 
-    try {
-      appendLine("[NETWORK] Simulating transaction payload...");
-      const unsignedTx = await buildAnchorProofTransaction(address, file.hash);
-      const preparedTx = await prepareAnchorProofTransaction(unsignedTx);
+        appendLine("[NETWORK] Requesting Freighter signature...");
+        const signResult = await signTransaction(preparedTx.toXDR(), {
+          networkPassphrase: Networks.TESTNET,
+          address: issuerAddress,
+        });
+        if (signResult.error) {
+          throw new Error(signResult.error.message);
+        }
 
-      appendLine("[NETWORK] Requesting Freighter signature...");
-      const signResult = await signTransaction(preparedTx.toXDR(), {
-        networkPassphrase: Networks.TESTNET,
-        address,
-      });
-      if (signResult.error) {
-        throw new Error(signResult.error.message);
+        appendLine("[NETWORK] Submitting to Stellar Testnet...");
+        const hash = await submitSignedTransaction(signResult.signedTxXdr);
+        await confirmTransaction(hash);
+
+        appendLine("[SOROBAN] Anchor confirmed. Ledger state updated.");
+        addRecord({
+          filename: targetFile.name,
+          hash: targetFile.hash,
+          issuer: issuerAddress,
+        });
+        setAnchorResult({ timestampIso: new Date().toISOString() });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        appendLine(`[ERROR] Transaction failed: ${message}`);
+      } finally {
+        setIsAnchoring(false);
       }
+    },
+    [appendLine]
+  );
 
-      appendLine("[NETWORK] Submitting to Stellar Testnet...");
-      const hash = await submitSignedTransaction(signResult.signedTxXdr);
-      await confirmTransaction(hash);
+  function handleAnchorClick() {
+    if (!file || isAnchoring) return;
 
-      appendLine("[SOROBAN] Anchor confirmed. Ledger state updated.");
-      addRecord({ filename: file.name, hash: file.hash, issuer: address });
-      setAnchorResult({ timestampIso: new Date().toISOString() });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      appendLine(`[ERROR] Transaction failed: ${message}`);
-    } finally {
-      setIsAnchoring(false);
+    if (!address) {
+      setPendingAnchor(true);
+      setIsWalletModalOpen(true);
+      return;
     }
+
+    void runAnchor(address, file);
   }
+
+  // The wallet modal closes itself on a successful connection — once
+  // that happens, resume the anchor the user actually asked for.
+  useEffect(() => {
+    if (!pendingAnchor || !address || !file) return;
+    setPendingAnchor(false);
+    void runAnchor(address, file);
+  }, [pendingAnchor, address, file, runAnchor]);
 
   function handleDownloadReceipt() {
     if (!file || !address || !anchorResult) return;
@@ -130,7 +165,12 @@ export function VerificationWorkspace() {
   return (
     <div className="border-b border-black">
       <div className="grid grid-cols-1 divide-y divide-black md:grid-cols-2 md:divide-x md:divide-y-0">
-        <Dropzone status={status} file={file} onFileDropped={handleFileDropped} />
+        <Dropzone
+          status={status}
+          file={file}
+          isAnchoring={isAnchoring}
+          onFileDropped={handleFileDropped}
+        />
         <TerminalConsole
           status={status}
           file={file}
@@ -149,7 +189,7 @@ export function VerificationWorkspace() {
           </Button>
         ) : (
           <Button
-            disabled={status !== "done" || !address || isAnchoring}
+            disabled={status !== "done" || isAnchoring}
             onClick={handleAnchorClick}
             className="px-6 py-3 text-xs"
           >
@@ -157,6 +197,18 @@ export function VerificationWorkspace() {
           </Button>
         )}
       </div>
+
+      <WalletModal
+        isOpen={isWalletModalOpen}
+        onClose={() => {
+          setIsWalletModalOpen(false);
+          // Only clear the pending intent if the modal closed without a
+          // connection — if it auto-closed *because* one succeeded,
+          // `address` is already set and the resume effect above should
+          // still fire.
+          if (!address) setPendingAnchor(false);
+        }}
+      />
     </div>
   );
 }

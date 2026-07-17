@@ -12,14 +12,18 @@ import { useWallet } from "@/components/dashboard/wallet-context";
 interface DropzoneProps {
   status: VerificationStatus;
   file: VerifiedFile | null;
+  isAnchoring: boolean;
   onFileDropped: (file: File) => void;
 }
 
-export function Dropzone({ status, file, onFileDropped }: DropzoneProps) {
+export function Dropzone({ status, file, isAnchoring, onFileDropped }: DropzoneProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const { address } = useWallet();
-  const isBusy = status !== "idle";
+  // "done" isn't busy — a finished/anchored document shouldn't block
+  // dropping the next one. Only the hashing animation and an in-flight
+  // anchor transaction (which "file" is mid-use by) should block.
+  const isBusy = status === "processing" || isAnchoring;
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -99,9 +103,14 @@ export function Dropzone({ status, file, onFileDropped }: DropzoneProps) {
           <p className="mt-2 font-mono text-xs text-slate-500">
             {truncateMiddle(file.hash, 10, 8)}
           </p>
-          {!address && (
+          {!address && !isAnchoring && (
             <p className="mt-4 font-mono text-xs uppercase tracking-widest text-slate-400">
               Connect wallet to anchor
+            </p>
+          )}
+          {!isAnchoring && (
+            <p className="mt-4 font-mono text-[11px] uppercase tracking-widest text-slate-400">
+              Drop another document to replace this one
             </p>
           )}
         </>

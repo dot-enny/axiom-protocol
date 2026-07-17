@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { SnapIn } from "@/components/motion/snap-in";
 import type {
   VerificationStatus,
@@ -32,6 +32,7 @@ export function TerminalConsole({
   extraLines,
 }: TerminalConsoleProps) {
   const [lines, setLines] = useState<string[]>([]);
+  const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (status !== "processing" || !file) return;
@@ -58,8 +59,15 @@ export function TerminalConsole({
 
   const allLines = [...lines, ...extraLines];
 
+  // Fixed-height log, not just a minimum — otherwise the panel grows
+  // taller with every anchored line instead of scrolling internally.
+  useEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [allLines.length]);
+
   return (
-    <div className="flex min-h-[420px] flex-col border border-black bg-black font-mono text-sm text-white">
+    <div className="flex h-[420px] flex-col border border-black bg-black font-mono text-sm text-white">
       <div className="flex items-center gap-2 border-b border-white/20 px-4 py-3">
         <span className="h-2.5 w-2.5 border border-white" />
         <span className="h-2.5 w-2.5 border border-white" />
@@ -69,7 +77,7 @@ export function TerminalConsole({
         </span>
       </div>
 
-      <div className="flex-1 space-y-2 p-6">
+      <div ref={logRef} className="flex-1 space-y-2 overflow-y-auto p-6">
         {allLines.length === 0 && (
           <p className="text-slate-500">{"// awaiting input"}</p>
         )}

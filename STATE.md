@@ -997,6 +997,63 @@ financial concept) are explicitly still UI simulations of workflows
 Axiom doesn't have real backing systems for, not stray mock data left
 over from earlier sessions.
 
+**Session 20 — Web3 Wallet Intercept modal (2026-07-17)**
+Clicking "Anchor to Soroban" without a connected wallet used to just be
+impossible — the button was `disabled` outright whenever `!address`,
+with a small "connect wallet to anchor" hint as the only feedback. That
+UX is replaced with an intercept: the button is now only disabled on
+`status !== "done" || isAnchoring`, and `handleAnchorClick` in
+`verification-workspace.tsx` checks `address` itself first — if
+missing, it calls `setIsWalletModalOpen(true)` and returns before
+touching the Soroban pipeline at all; if present, the existing
+simulate/sign/submit/confirm flow runs exactly as before, untouched.
+
+New `frontend/components/WalletModal.tsx`: a fixed, centered overlay
+(`bg-black/80`) holding a `border-2 border-black` white panel — header
+reads "AUTHORIZATION REQUIRED // CONNECT WALLET" with a
+`[ X ] CLOSE` control at the top right, then three bracket-icon rows
+(`[ F ]`/`[ A ]`/`[ X ]`) for Freighter, Albedo, and xBull. Freighter
+is the only one that's real: it reuses the existing `useWallet()`
+context's `connect()` (same Freighter pipeline `wallet-context.tsx`
+already had, so this modal is a new entry point into existing
+machinery, not a parallel implementation), and a successful connection
+closes the modal automatically via an effect watching `state ===
+"connected"`. Albedo and xBull have no real integration in this
+codebase, so per this project's running "don't fake functionality"
+principle (see the Zero Mocks phase above), their rows are visually
+present with the requested subtext but carry a plain, unclickable
+`COMING SOON` tag rather than a button that would pretend to connect
+to a wallet that isn't wired up.
+
+Freighter's row calls `isConnected()` from `@stellar/freighter-api`
+directly (a separate call from the one already inside
+`connectFreighterWallet()`) purely for *display* — detect extension
+presence before the user commits to clicking Connect. This surfaced a
+real, worth-documenting SDK behavior: with no extension present to
+answer it, `isConnected()` neither resolves nor rejects — it just
+hangs forever, confirmed by watching the row sit on "Detecting..."
+indefinitely in a real browser. Left as-is, every visitor without
+Freighter installed (i.e. most first-time visitors, the exact
+audience this modal exists for) would see a permanently stuck
+"Detecting..." row. Fixed with `Promise.race` against a 2.5s timeout
+that resolves to `"not-installed"` if `isConnected()` hasn't answered
+by then — not part of the original task spec, but a direct
+consequence of testing the literal spec'd behavior for real instead of
+trusting it in code review.
+
+Verified for real in a real browser (Chrome via Playwright): dropped a
+real file to reach "Hash Ready" with no wallet connected, confirmed
+the modal was absent beforehand, clicked "Anchor to Soroban" and
+confirmed the modal opened instead of any network activity starting;
+confirmed all three wallet rows, their exact subtext strings, and the
+close control render; confirmed the Freighter row read "Detecting..."
+immediately after opening and "Extension not found" + an "Install"
+button after the 2.5s fallback elapsed (this machine still has no
+Freighter extension in the automated browser, consistent with every
+prior session); confirmed clicking `[ X ] CLOSE` removed the modal
+from the DOM. `tsc --noEmit` and a full `next build` both pass with
+zero errors.
+
 ## Not built yet
 
 - No real per-key auth or rate limiting on `/api/v1/anchor` — the
