@@ -41,14 +41,17 @@ export function TerminalConsole({
     setLines([]);
 
     const lineTimers = sequence.map((line, i) =>
-      setTimeout(() => {
-        setLines((prev) => [...prev, line]);
-      }, (i + 1) * LINE_DELAY_MS)
+      setTimeout(
+        () => {
+          setLines((prev) => [...prev, line]);
+        },
+        (i + 1) * LINE_DELAY_MS,
+      ),
     );
 
     const completeTimer = setTimeout(
       onSequenceComplete,
-      (sequence.length + 1) * LINE_DELAY_MS
+      (sequence.length + 1) * LINE_DELAY_MS,
     );
 
     return () => {
@@ -79,13 +82,25 @@ export function TerminalConsole({
 
       <div ref={logRef} className="flex-1 space-y-2 overflow-y-auto p-6">
         {allLines.length === 0 && (
-          <p className="text-xs uppercase tracking-widest">{"[ AWAITING INPUT ]"}</p>
+          <p className="text-xs uppercase tracking-widest">
+            {"[ AWAITING INPUT ]"}
+          </p>
         )}
-        {allLines.map((line, i) => (
-          <SnapIn key={i}>
-            <p className="break-all">{line}</p>
-          </SnapIn>
-        ))}
+        {allLines.map((line, i) => {
+          const isAlert =
+            line.startsWith("[REJECTED]") || line.startsWith("[FAILURE]");
+          return (
+            <SnapIn key={i}>
+              {isAlert ? (
+                <p className="border-2 border-black bg-white px-3 py-2 font-bold text-black break-words">
+                  {line}
+                </p>
+              ) : (
+                <p className="break-all">{line}</p>
+              )}
+            </SnapIn>
+          );
+        })}
       </div>
     </div>
   );
