@@ -3,12 +3,12 @@ import { Button } from "@/components/ui/button";
 export function Navbar() {
   return (
     <header className="sticky top-0 z-50 flex items-center justify-between border-b border-black bg-white/95 px-6 py-4 backdrop-blur-sm md:px-10">
-      <div className="flex items-baseline gap-2">
-        <span className="font-mono text-lg font-bold tracking-tight">
+      <div className="flex w-fit items-center rounded-none border-2 border-black">
+        <span className="bg-black px-3 py-1 font-mono text-sm font-bold tracking-widest text-white">
           AXIOM
         </span>
-        <span className="hidden font-mono text-xs uppercase tracking-widest text-slate-500 sm:inline">
-          / Protocol
+        <span className="bg-white px-3 py-1 font-mono text-xs font-bold tracking-widest text-black">
+          PROTOCOL
         </span>
       </div>
 
