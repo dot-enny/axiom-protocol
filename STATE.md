@@ -1447,6 +1447,65 @@ in a real browser via the established temporary-debug-hook pattern — a
 `git diff` and a repo-wide grep. `tsc --noEmit` and `next build` both
 pass clean.
 
+**Session 26 — Local file previewer, core workspace finalized (2026-07-17)**
+`Dropzone` now renders a local, memory-only thumbnail of the dropped
+file before anchoring — no network round-trip, reinforcing the
+zero-knowledge architecture (the raw file already never left the
+browser to compute its hash; now it doesn't leave the browser to
+preview it either).
+
+- `frontend/components/dashboard/dropzone.tsx` — added local
+  `previewFile`/`previewUrl` state, decoupled from the parent's
+  hash-only `VerifiedFile`. `loadPreview()` calls
+  `URL.createObjectURL(file)` immediately on drop/select (before the
+  parent's async hashing even starts) and revokes the *previous*
+  object URL first if one existed; a `useEffect` cleanup revokes the
+  current one on unmount. Image files (`file.type.startsWith("image/")`)
+  render via a plain `<img>` (a local `blob:` URL isn't something
+  `next/image` optimizes, so the lint rule is explicitly suppressed
+  with a comment explaining why) with `grayscale contrast-125` forcing
+  it into the monochrome palette; everything else renders a stark
+  `border-2 border-black` square with a large `[ PDF ]`/`[ DOC ]`/etc.
+  extension block (derived from the filename, not a hardcoded list).
+  A `[ X ] REMOVE` button sits in the top-right corner of the preview
+  box, revokes the object URL, clears local preview state, resets the
+  file input, and calls a new `onClear` prop.
+- `frontend/components/dashboard/verification-workspace.tsx` — added
+  `handleClear()` (resets `file`/`status`/`terminalLines`/
+  `anchorResult`/`pendingAnchor` back to idle) wired into `Dropzone`'s
+  new `onClear` prop, so removing the preview genuinely resets the
+  whole pipeline rather than leaving a stale hash/status behind.
+
+**A real bug was caught and fixed during verification, not just
+claimed clean**: the `[ X ] REMOVE` button was unclickable — Playwright
+reported the `<img>` intercepting pointer events at the button's
+screen position. Confirmed for real via
+`document.elementFromPoint()` at the button's exact center: the `img`
+was the actual hit target, not the button, despite the button being
+`position: absolute`. Root cause: a CSS `filter` (the `grayscale
+contrast-125` classes) establishes its own stacking context per spec,
+which was enough to paint the image over the button in this browser
+even though it's `position: static`. Fixed by giving the button an
+explicit `z-10`. Re-verified after the fix: clicking `[ X ] REMOVE`
+now actually works.
+
+Verified for real in a live browser (Chrome via Playwright, using
+`setInputFiles` since real OS drag-and-drop can't be scripted): a real
+PNG renders as a grayscale/high-contrast thumbnail; a non-image file
+renders the `[ PDF ]` block; the remove button clears the preview and
+returns the dropzone to its idle state; dropping a second, genuinely
+different file while a preview is showing revokes the first object URL
+immediately (confirmed via a `fetch()` against the old blob URL
+failing) while the new one stays valid; removing the second file
+revokes it too. `tsc --noEmit` and `next build` both pass clean with
+zero lint warnings.
+
+This closes out the "robust functionality sprint" — every planned
+feature (deep-linking, block explorer links, contract error
+translation, and now the local file previewer) is built and verified
+for real. The core anchoring workspace (drop → preview → hash →
+anchor → receipt) is feature-complete.
+
 ## Not built yet
 
 - No real per-key auth or rate limiting on `/api/v1/anchor` — the
