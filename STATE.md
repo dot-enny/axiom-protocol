@@ -1295,6 +1295,47 @@ present, and via a scroll-through screenshot that it renders correctly
 once revealed. Not a regression from this session, not a hacker-trope
 or color issue, so left alone.
 
+**Session 23 — URL-driven verification linkage (2026-07-17)**
+Deep-linking into the Verify portal: reviewers can now jump straight
+from any hash in the app to a pre-populated, pre-queried audit view
+with one click.
+
+- `frontend/components/verify/verify-panel.tsx` — reads the `hash`
+  query param via `useSearchParams` (from `next/navigation`) instead
+  of a server-passed prop. The submit logic was extracted into a
+  reusable `handleVerify(rawHash)` used by both the form's submit
+  handler and a mount-only effect (guarded with a `useRef` flag so it
+  fires once, not on every re-render): if `?hash=` is present, the
+  input is populated and the query auto-fires immediately, landing
+  straight on the found/rejected state without a manual submit.
+- `frontend/app/(platform)/verify/page.tsx` — `useSearchParams` is a
+  client hook, but the page still exports `metadata` (server-only), so
+  the param-reading moved down into `VerifyPanel` itself; the page now
+  just wraps it in `<Suspense>` per Next.js's requirement for any
+  component using `useSearchParams`, and stays statically prerendered
+  (confirmed `○ /verify` in the build output, not forced dynamic).
+- `frontend/components/dashboard/ledger-row.tsx` — the dashboard
+  ledger's Document Hash cell is now a `next/link` to
+  `/verify?hash=${hash}`, styled with the same bordered
+  hover-invert (`hover:bg-black hover:text-white`) treatment the Asset
+  Vault's "[ View Hash ]" link already used — `asset-ledger.tsx`
+  needed no changes since it was already wired this way from an
+  earlier session.
+
+Verified for real in a live browser (Playwright + system Chrome, not
+just code review): seeded a record into `localStorage`, confirmed the
+dashboard ledger row renders a real `<a href="/verify?hash=...">`,
+clicked it and watched it land on the Verify page with the input
+already filled and "Verified: Anchor Record Found" already showing
+(no manual submit); repeated the same check for a direct
+`/verify?hash=...` navigation (no prior click) and for the existing
+vault "[ View Hash ]" link, both auto-verify correctly; confirmed
+visiting `/verify` with no query param still starts idle with an empty
+input (no auto-fire, no loop). Also caught and fixed an unrelated
+stale dev-server process on port 3000 serving 404s for its own static
+chunks — killed it and started a clean one before testing. `tsc
+--noEmit` and `next build` both pass clean.
+
 ## Not built yet
 
 - No real per-key auth or rate limiting on `/api/v1/anchor` — the
