@@ -119,7 +119,7 @@ export function VerificationWorkspace() {
   function handleDownloadReceipt() {
     if (!file || !address || !anchorResult) return;
 
-    downloadComplianceReceipt({
+    void downloadComplianceReceipt({
       hash: file.hash,
       contractId: process.env.NEXT_PUBLIC_CONTRACT_ID ?? "Unknown",
       issuer: address,
