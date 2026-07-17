@@ -881,6 +881,51 @@ metrics panel agreed to the dollar); confirmed Active Contracts read
 `2`; cleared the seeded state afterward so it wouldn't linger in this
 machine's real local dev data. `tsc --noEmit` clean.
 
+**Session 18 — Live QR code on the Compliance Receipt (2026-07-17)**
+The PDF compliance receipt (`lib/pdf.ts`, downloaded from the Dashboard
+after a confirmed anchor) now embeds a real, scannable QR code instead
+of being pure text — `qrcode` + `@types/qrcode` installed as real
+dependencies (not devDependencies; the generated code ships inside a
+user-facing download, so it's runtime, not tooling). The QR payload is
+the contract's actual Stellar Expert Testnet explorer URL
+(`https://stellar.expert/explorer/testnet/contract/<contractId>`, built
+from `data.contractId` so it stays correct if the deployed contract
+ever changes) — not the document hash or issuer address, since the
+task asked specifically for a link to the on-chain explorer, not a
+self-referential payload.
+
+`QRCode.toDataURL` is async, which made `downloadComplianceReceipt`
+itself async (`Promise<void>`, was `void`) — its one call site in
+`verification-workspace.tsx`'s `handleDownloadReceipt` now does `void
+downloadComplianceReceipt(...)`, explicit fire-and-forget since it's
+invoked from a synchronous `onClick`. The new `drawExplorerQrCode`
+helper draws a 32mm QR image inset 2mm inside a heavy 0.8mm black
+`rect(..., "S")` border, both flush against the page's bottom-right
+corner (computed from `boxRight`/`boxBottom`, not hardcoded offsets,
+so the box and image can't drift apart if either constant changes) —
+matches the receipt's existing "heavy border, no gradients" language
+used everywhere else on the page. The `[ SCAN TO VERIFY STATE ON
+STELLAR EXPERT ]` caption is bold Courier at 6.5pt, right-aligned to
+sit directly *above* the box rather than squeezed beside it — an
+initial beside-the-box layout (right-aligned text ending a few mm to
+the box's left) visually overlapped the QR's left edge when actually
+rendered, so it was moved above instead, which reads just as
+"next to it" while leaving no ambiguous horizontal-fit math.
+
+Verified for real, not just by code review: a standalone Node script
+(outside the Next.js/React tree, run directly against
+`frontend/node_modules`'s installed `jspdf`/`qrcode`, deleted after)
+called the exact same `QRCode.toDataURL`/`jsPDF.addImage`/`rect`
+sequence as `pdf.ts` against the real deployed contract ID, confirmed
+the generated data URL is a real `image/png` payload, wrote the
+resulting PDF to disk, confirmed it opens as a valid PDF (`%PDF-`
+header, contains a real `/Image` XObject, not an empty placeholder),
+and visually inspected the rendered page directly — caught the
+beside-the-box overlap this way on the first pass, fixed the layout,
+then re-rendered and visually confirmed the fix (border, caption, and
+QR code all sit cleanly in the bottom-right corner with no overlap).
+`npx tsc --noEmit` and a full `next build` both pass with zero errors.
+
 ## Not built yet
 
 - No real per-key auth or rate limiting on `/api/v1/anchor` — the
