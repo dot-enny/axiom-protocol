@@ -72,21 +72,18 @@ export function TerminalConsole({
         <span className="h-2.5 w-2.5 border border-white" />
         <span className="h-2.5 w-2.5 border border-white" />
         <span className="h-2.5 w-2.5 border border-white" />
-        <span className="ml-2 text-xs uppercase tracking-widest text-slate-400">
+        <span className="ml-2 text-xs uppercase tracking-widest text-white">
           verification.log
         </span>
       </div>
 
       <div ref={logRef} className="flex-1 space-y-2 overflow-y-auto p-6">
         {allLines.length === 0 && (
-          <p className="text-slate-500">{"// awaiting input"}</p>
+          <p className="text-xs uppercase tracking-widest">{"[ AWAITING INPUT ]"}</p>
         )}
         {allLines.map((line, i) => (
           <SnapIn key={i}>
-            <p className="break-all text-slate-300">
-              <span className="text-white">{"> "}</span>
-              {line}
-            </p>
+            <p className="break-all">{line}</p>
           </SnapIn>
         ))}
       </div>

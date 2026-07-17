@@ -24,12 +24,14 @@ export function NetworkMetrics() {
     <section className="border-b border-black">
       <div className="border-b border-black px-6 py-10 md:px-10">
         <SnapIn>
-          <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
-            {"// 02"}
-          </p>
-          <h2 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
-            Network Metrics
-          </h2>
+          <div className="flex w-fit border-b-2 border-black">
+            <span className="flex items-center bg-black px-3 font-mono text-xs font-bold uppercase tracking-widest text-white">
+              02
+            </span>
+            <h2 className="px-4 py-1 text-3xl font-black tracking-tight md:text-4xl">
+              Network Metrics
+            </h2>
+          </div>
         </SnapIn>
       </div>
 

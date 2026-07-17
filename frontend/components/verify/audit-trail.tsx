@@ -45,8 +45,8 @@ export function AuditTrail({ timestampIso }: AuditTrailProps) {
 
   return (
     <div className="mt-6 border-t border-white pt-6">
-      <p className="font-mono text-xs uppercase tracking-widest text-slate-400">
-        {"// Cryptographic Audit Trail"}
+      <p className="inline-block border border-white px-2 py-1 font-mono text-xs uppercase tracking-widest">
+        Cryptographic Audit Trail
       </p>
 
       <ol className="mt-6 border-l-2 border-white pl-6">
@@ -58,16 +58,16 @@ export function AuditTrail({ timestampIso }: AuditTrailProps) {
           return (
             <li key={node.label} className="relative pb-8 last:pb-0">
               <span className="absolute -left-[31px] top-1 h-2.5 w-2.5 border border-white bg-black" />
-              <p className="font-mono text-xs uppercase tracking-widest text-slate-400">
-                {`> [ ${node.label} ]`}
+              <p className="font-mono text-xs uppercase tracking-widest">
+                {`[ ${node.label} ]`}
               </p>
               <p className="mt-1 font-mono text-sm font-bold text-white">
                 {node.title}
               </p>
-              <p className="mt-1 break-all font-mono text-xs text-slate-400">
+              <p className="mt-1 break-all font-mono text-xs text-white">
                 {node.subtext}
               </p>
-              <p className="mt-2 font-mono text-xs text-slate-500">
+              <p className="mt-2 font-mono text-xs text-white">
                 {formatTimestampWithSeconds(nodeTimeIso)}
               </p>
             </li>

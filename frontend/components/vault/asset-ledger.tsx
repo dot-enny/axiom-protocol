@@ -19,16 +19,16 @@ export function AssetLedger() {
       <table className="w-full min-w-[760px] border-collapse whitespace-nowrap font-mono text-sm">
         <thead className="border-b border-black">
           <tr className="text-left">
-            <th className="px-6 py-4 font-mono text-xs font-normal uppercase tracking-widest text-slate-500 md:px-10">
+            <th className="px-6 py-4 font-mono text-xs font-normal uppercase tracking-widest md:px-10">
               Asset Name
             </th>
-            <th className="px-6 py-4 font-mono text-xs font-normal uppercase tracking-widest text-slate-500">
+            <th className="px-6 py-4 font-mono text-xs font-normal uppercase tracking-widest">
               Token ID
             </th>
-            <th className="px-6 py-4 font-mono text-xs font-normal uppercase tracking-widest text-slate-500">
+            <th className="px-6 py-4 font-mono text-xs font-normal uppercase tracking-widest">
               TVL
             </th>
-            <th className="px-6 py-4 font-mono text-xs font-normal uppercase tracking-widest text-slate-500">
+            <th className="px-6 py-4 font-mono text-xs font-normal uppercase tracking-widest">
               Compliance Proof
             </th>
           </tr>
@@ -38,7 +38,7 @@ export function AssetLedger() {
             <tr>
               <td
                 colSpan={4}
-                className="px-6 py-6 font-mono text-xs uppercase tracking-widest text-slate-500 md:px-10"
+                className="px-6 py-6 font-mono text-xs uppercase tracking-widest md:px-10"
               >
                 {"[ NO TOKENIZED ASSETS FOUND. ANCHOR A DOCUMENT TO BEGIN. ]"}
               </td>

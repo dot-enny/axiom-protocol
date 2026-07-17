@@ -10,8 +10,8 @@ export default function VaultPage() {
   return (
     <div>
       <div className="border-b border-black px-6 py-10 md:px-10">
-        <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
-          {"// Tokenized Vault"}
+        <p className="inline-block border border-black px-2 py-1 font-mono text-xs uppercase tracking-widest">
+          Tokenized Vault
         </p>
         <h1 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
           Asset Vault

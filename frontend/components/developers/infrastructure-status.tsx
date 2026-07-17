@@ -7,13 +7,13 @@ export function InfrastructureStatus() {
       <SectionHeader label="Infrastructure" title="Infrastructure Status" />
       <div className="grid grid-cols-1 divide-y divide-black md:grid-cols-2 md:divide-x md:divide-y-0">
         <div className="px-6 py-10 md:px-10">
-          <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
+          <p className="font-mono text-xs uppercase tracking-widest">
             Rate Limits
           </p>
           <p className="mt-4 font-mono text-sm">
             Tier: <span className="font-bold">Institutional</span>
           </p>
-          <p className="mt-2 font-mono text-sm text-slate-500">
+          <p className="mt-2 font-mono text-sm">
             Usage: 0 / 10,000 requests per minute
           </p>
           <div className="mt-4 h-2 w-full max-w-xs border border-black">
@@ -22,10 +22,10 @@ export function InfrastructureStatus() {
         </div>
 
         <div className="px-6 py-10 md:px-10">
-          <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
+          <p className="font-mono text-xs uppercase tracking-widest">
             Webhooks
           </p>
-          <p className="mt-4 font-mono text-sm text-slate-500">
+          <p className="mt-4 font-mono text-sm">
             Endpoint URL: None configured
           </p>
           <div className="mt-6">

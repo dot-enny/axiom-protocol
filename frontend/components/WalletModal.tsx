@@ -41,8 +41,6 @@ interface WalletOptionProps {
   name: string;
   subtext: string;
   action: ReactNode;
-  /** Muted, non-interactive treatment for wallets with no real integration. */
-  disabled?: boolean;
 }
 
 function WalletOption({
@@ -50,7 +48,6 @@ function WalletOption({
   name,
   subtext,
   action,
-  disabled,
 }: WalletOptionProps) {
   return (
     <div className="flex items-center justify-between gap-4 px-6 py-5 transition-colors duration-100">
@@ -62,9 +59,7 @@ function WalletOption({
           <p className="font-mono text-sm font-bold uppercase tracking-widest">
             {name}
           </p>
-          <p
-            className={`mt-0.5 font-mono text-xs ${disabled ? "" : "text-slate-500"}`}
-          >
+          <p className="mt-0.5 font-mono text-xs uppercase tracking-widest">
             {subtext}
           </p>
         </div>
@@ -108,16 +103,16 @@ export function WalletModal({ isOpen, onClose }: WalletModalProps) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.12, ease: "linear" }}
-        className="w-full max-w-md border-2 border-black bg-white"
+        className="w-full max-w-md rounded-none border-2 border-black bg-white"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-4 border-b-2 border-black px-6 py-4">
           <h2 className="font-mono text-xs font-bold uppercase tracking-widest sm:text-sm">
-            {"AUTHORIZATION REQUIRED // CONNECT WALLET"}
+            {"AUTHORIZATION REQUIRED — CONNECT WALLET"}
           </h2>
           <button
             onClick={onClose}
-            className="shrink-0 font-mono text-xs uppercase tracking-widest text-slate-500 transition-colors duration-100 hover:text-black"
+            className="shrink-0 font-mono text-xs uppercase tracking-widest hover:underline"
           >
             {"[ X ] CLOSE"}
           </button>
@@ -155,9 +150,8 @@ export function WalletModal({ isOpen, onClose }: WalletModalProps) {
             icon="A"
             name="Albedo"
             subtext="Browser-based web wallet"
-            disabled
             action={
-              <span className="border border-slate-400 px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-slate-400">
+              <span className="rounded-none border border-black px-3 py-1.5 font-mono text-xs uppercase tracking-widest">
                 Coming Soon
               </span>
             }
@@ -166,9 +160,8 @@ export function WalletModal({ isOpen, onClose }: WalletModalProps) {
             icon="X"
             name="xBull"
             subtext="Desktop & Mobile extension"
-            disabled
             action={
-              <span className="border border-slate-400 px-3 py-1.5 font-mono text-xs uppercase tracking-widest text-slate-400">
+              <span className="rounded-none border border-black px-3 py-1.5 font-mono text-xs uppercase tracking-widest">
                 Coming Soon
               </span>
             }
@@ -176,7 +169,7 @@ export function WalletModal({ isOpen, onClose }: WalletModalProps) {
         </div>
 
         {state === "error" && (
-          <p className="border-t-2 border-black px-6 py-4 font-mono text-xs text-slate-500">
+          <p className="border-t-2 border-black px-6 py-4 font-mono text-xs uppercase tracking-widest">
             Connection failed. Try again.
           </p>
         )}

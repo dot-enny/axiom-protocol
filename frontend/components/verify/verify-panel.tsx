@@ -70,7 +70,7 @@ export function VerifyPanel({ initialHash }: VerifyPanelProps) {
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <label
           htmlFor="hash"
-          className="font-mono text-xs uppercase tracking-widest text-slate-500"
+          className="font-mono text-xs uppercase tracking-widest"
         >
           Document Hash (SHA-256)
         </label>
@@ -84,7 +84,7 @@ export function VerifyPanel({ initialHash }: VerifyPanelProps) {
           placeholder="0000000000000000000000000000000000000000000000000000000000000000"
           spellCheck={false}
           autoComplete="off"
-          className="border-2 border-black bg-white px-4 py-4 font-mono text-sm text-black placeholder:text-slate-300 focus:outline-none focus:ring-0"
+          className="rounded-none border-2 border-black bg-white px-4 py-4 font-mono text-sm text-black placeholder:text-black/40 focus:outline-none focus:ring-0"
         />
         {formatWarning && (
           <p className="font-mono text-xs uppercase tracking-widest text-black">
@@ -99,19 +99,19 @@ export function VerifyPanel({ initialHash }: VerifyPanelProps) {
 
       <div className="mt-8">
         {queryState === "loading" && (
-          <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
+          <p className="font-mono text-xs uppercase tracking-widest">
             [NETWORK] Scanning blocks...
           </p>
         )}
 
         {queryState === "found" && record && (
-          <div className="border-2 border-black bg-black p-6 text-white">
+          <div className="rounded-none border-2 border-black bg-black p-6 text-white">
             <p className="font-mono text-2xl font-bold uppercase tracking-tight sm:text-3xl">
               Verified: Anchor Record Found
             </p>
             <div className="mt-6 flex flex-col gap-4 border-t border-white pt-6">
               <div>
-                <p className="font-mono text-xs uppercase tracking-widest text-slate-400">
+                <p className="font-mono text-xs uppercase tracking-widest">
                   Issuer Wallet Address
                 </p>
                 <p className="mt-1 break-all font-mono text-sm">
@@ -119,7 +119,7 @@ export function VerifyPanel({ initialHash }: VerifyPanelProps) {
                 </p>
               </div>
               <div>
-                <p className="font-mono text-xs uppercase tracking-widest text-slate-400">
+                <p className="font-mono text-xs uppercase tracking-widest">
                   UTC Timestamp of Anchor
                 </p>
                 <p className="mt-1 font-mono text-sm">{record.timestampIso}</p>
@@ -131,12 +131,12 @@ export function VerifyPanel({ initialHash }: VerifyPanelProps) {
         )}
 
         {queryState === "rejected" && (
-          <div className="border-2 border-black p-6">
+          <div className="rounded-none border-2 border-black p-6">
             <p className="font-mono text-2xl font-bold uppercase tracking-tight sm:text-3xl">
               Rejected: No Match On Ledger
             </p>
             {detail && (
-              <p className="mt-4 font-mono text-xs text-slate-500">
+              <p className="mt-4 font-mono text-xs">
                 [ERROR] {detail}
               </p>
             )}

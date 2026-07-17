@@ -20,7 +20,7 @@ export function TerminalWindow({
         <span className="h-2.5 w-2.5 border border-white" />
         <span className="h-2.5 w-2.5 border border-white" />
         <span className="h-2.5 w-2.5 border border-white" />
-        <span className="ml-2 font-mono text-xs uppercase tracking-widest text-slate-400">
+        <span className="ml-2 font-mono text-xs uppercase tracking-widest text-white">
           {title}
         </span>
       </div>

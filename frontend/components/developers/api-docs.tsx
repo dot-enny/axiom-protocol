@@ -24,16 +24,16 @@ const RESPONSE_EXAMPLE = `// 200 OK
 
 function CodeBlock({ title, code }: { title: string; code: string }) {
   return (
-    <div className="border border-black bg-black text-white">
+    <div className="rounded-none border border-black bg-black text-white">
       <div className="flex items-center gap-2 border-b border-white/20 px-4 py-3">
         <span className="h-2.5 w-2.5 border border-white" />
         <span className="h-2.5 w-2.5 border border-white" />
         <span className="h-2.5 w-2.5 border border-white" />
-        <span className="ml-2 font-mono text-xs uppercase tracking-widest text-slate-400">
+        <span className="ml-2 font-mono text-xs uppercase tracking-widest text-white">
           {title}
         </span>
       </div>
-      <pre className="overflow-x-auto p-6 font-mono text-sm leading-relaxed text-slate-200">
+      <pre className="overflow-x-auto p-6 font-mono text-sm leading-relaxed text-white">
         <code>{code}</code>
       </pre>
     </div>
@@ -45,7 +45,7 @@ export function ApiDocs() {
     <section>
       <SectionHeader label="Documentation" title="REST API" />
       <div className="px-6 py-10 md:px-10">
-        <p className="max-w-lg font-mono text-sm text-slate-500">
+        <p className="max-w-lg font-mono text-sm">
           Anchor a document hash programmatically. The same
           `anchor_proof` invocation the dashboard submits over Freighter
           is available headlessly here.

@@ -19,8 +19,8 @@ export function LedgerRow({ hash, timestamp, issuer, delay = 0 }: LedgerRowProps
       transition={{ duration: 0.15, delay, ease: "linear" }}
     >
       <td className="px-6 py-4 md:px-10">{truncateMiddle(hash, 10, 8)}</td>
-      <td className="px-6 py-4 text-slate-600">{timestamp}</td>
-      <td className="px-6 py-4 text-slate-600">{truncateMiddle(issuer, 6, 6)}</td>
+      <td className="px-6 py-4">{timestamp}</td>
+      <td className="px-6 py-4">{truncateMiddle(issuer, 6, 6)}</td>
     </motion.tr>
   );
 }

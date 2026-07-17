@@ -75,7 +75,7 @@ export function Dropzone({ status, file, isAnchoring, onFileDropped }: DropzoneP
           <p className="font-mono text-sm uppercase tracking-widest">
             Drop Legal Document
           </p>
-          <p className="mt-2 font-mono text-xs text-slate-500">
+          <p className="mt-2 font-mono text-xs uppercase tracking-widest">
             or click to browse
           </p>
         </>
@@ -83,7 +83,7 @@ export function Dropzone({ status, file, isAnchoring, onFileDropped }: DropzoneP
 
       {status === "processing" && (
         <>
-          <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
+          <p className="font-mono text-xs uppercase tracking-widest">
             Processing
           </p>
           <p className="mt-4 max-w-xs truncate font-mono text-sm">
@@ -94,22 +94,22 @@ export function Dropzone({ status, file, isAnchoring, onFileDropped }: DropzoneP
 
       {status === "done" && file && (
         <>
-          <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
+          <p className="font-mono text-xs uppercase tracking-widest">
             Status: Hash Ready
           </p>
           <p className="mt-4 max-w-xs truncate font-mono text-sm">
             {file.name}
           </p>
-          <p className="mt-2 font-mono text-xs text-slate-500">
+          <p className="mt-2 font-mono text-xs">
             {truncateMiddle(file.hash, 10, 8)}
           </p>
           {!address && !isAnchoring && (
-            <p className="mt-4 font-mono text-xs uppercase tracking-widest text-slate-400">
+            <p className="mt-4 font-mono text-xs uppercase tracking-widest">
               Connect wallet to anchor
             </p>
           )}
           {!isAnchoring && (
-            <p className="mt-4 font-mono text-[11px] uppercase tracking-widest text-slate-400">
+            <p className="mt-4 font-mono text-[11px] uppercase tracking-widest">
               Drop another document to replace this one
             </p>
           )}

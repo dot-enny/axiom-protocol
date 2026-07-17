@@ -20,13 +20,13 @@ export function MetricItem({ value, label, subtext, index }: MetricItemProps) {
         />
       )}
       <SnapIn delay={index * 0.06}>
-        <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
+        <p className="font-mono text-xs uppercase tracking-widest">
           {label}
         </p>
         <p className="mt-4 text-4xl font-black tracking-tight md:text-5xl">
           {value}
         </p>
-        <p className="mt-2 text-sm text-slate-600">{subtext}</p>
+        <p className="mt-2 text-sm">{subtext}</p>
       </SnapIn>
     </div>
   );

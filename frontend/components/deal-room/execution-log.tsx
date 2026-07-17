@@ -13,21 +13,18 @@ export function ExecutionLog({ lines }: ExecutionLogProps) {
         <span className="h-2.5 w-2.5 border border-white" />
         <span className="h-2.5 w-2.5 border border-white" />
         <span className="h-2.5 w-2.5 border border-white" />
-        <span className="ml-2 text-xs uppercase tracking-widest text-slate-400">
+        <span className="ml-2 text-xs uppercase tracking-widest text-white">
           execution.log
         </span>
       </div>
 
       <div className="flex-1 space-y-2 p-6">
         {lines.length === 0 && (
-          <p className="text-slate-500">{"// awaiting execution"}</p>
+          <p className="text-xs uppercase tracking-widest">{"[ AWAITING EXECUTION ]"}</p>
         )}
         {lines.map((line, i) => (
           <SnapIn key={i}>
-            <p className="break-all text-slate-300">
-              <span className="text-white">{"> "}</span>
-              {line}
-            </p>
+            <p className="break-all">{line}</p>
           </SnapIn>
         ))}
       </div>

@@ -180,7 +180,7 @@ export function VerificationWorkspace() {
       </div>
 
       <div className="flex items-center justify-between border-t border-black px-6 py-6 md:px-10">
-        <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
+        <p className="font-mono text-xs uppercase tracking-widest">
           {anchorStatusLabel(status, Boolean(address), Boolean(anchorResult))}
         </p>
         {anchorResult ? (

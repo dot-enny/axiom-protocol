@@ -14,12 +14,12 @@ export function WalletConnector() {
   if (state === "connected" && address) {
     return (
       <div className={WRAPPER}>
-        <div className="border border-black px-4 py-2 text-center font-mono text-xs uppercase tracking-widest md:py-3">
+        <div className="rounded-none border border-black px-4 py-2 text-center font-mono text-xs uppercase tracking-widest md:py-3">
           {truncateMiddle(address, 4, 4)}
         </div>
         <button
           onClick={disconnect}
-          className="mt-2 w-full font-mono text-[11px] uppercase tracking-widest text-slate-500 transition-colors duration-100 hover:text-black"
+          className="mt-2 w-full font-mono text-[11px] uppercase tracking-widest hover:underline"
         >
           Disconnect
         </button>
@@ -32,7 +32,7 @@ export function WalletConnector() {
   if (state === "error" && isWalletMissing) {
     return (
       <div className={WRAPPER}>
-        <p className="mb-2 font-mono text-xs uppercase tracking-widest text-slate-500">
+        <p className="mb-2 font-mono text-xs uppercase tracking-widest">
           Stellar wallet required.
         </p>
         <Button
@@ -59,7 +59,7 @@ export function WalletConnector() {
         {state === "disconnected" && "Connect Wallet"}
       </Button>
       {state === "error" && error && (
-        <p className="mt-2 max-w-[200px] font-mono text-[11px] text-slate-500">
+        <p className="mt-2 max-w-[200px] font-mono text-[11px]">
           {error}
         </p>
       )}

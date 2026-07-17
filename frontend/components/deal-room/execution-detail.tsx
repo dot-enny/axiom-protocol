@@ -26,7 +26,7 @@ export function ExecutionDetail({
       <div className="border-b border-black px-6 py-6 md:px-10">
         <button
           onClick={onBack}
-          className="font-mono text-xs uppercase tracking-widest text-slate-500 transition-colors duration-100 hover:text-black"
+          className="font-mono text-xs uppercase tracking-widest hover:underline"
         >
           {"← Back to Pending Queue"}
         </button>
@@ -34,7 +34,7 @@ export function ExecutionDetail({
           {truncateMiddle(deal.hash, 10, 8)}
         </h2>
         <div className="mt-2 flex items-center gap-4">
-          <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
+          <p className="font-mono text-xs uppercase tracking-widest">
             {deal.assetType}
           </p>
           <Link

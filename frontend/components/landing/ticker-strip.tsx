@@ -13,7 +13,7 @@ export function TickerStrip() {
       {SPECS.map((spec, i) => (
         <div
           key={spec}
-          className="flex-1 px-6 py-4 font-mono text-[11px] uppercase tracking-widest text-slate-500"
+          className="flex-1 px-6 py-4 font-mono text-[11px] uppercase tracking-widest"
         >
           <SnapIn delay={i * 0.04}>{spec}</SnapIn>
         </div>

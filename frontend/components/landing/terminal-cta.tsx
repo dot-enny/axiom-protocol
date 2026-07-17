@@ -12,13 +12,15 @@ export function TerminalCta() {
   return (
     <section className="bg-black px-6 py-24 text-white md:px-10 md:py-32">
       <SnapIn>
-        <p className="font-mono text-xs uppercase tracking-widest text-slate-400">
-          {"// 04"}
-        </p>
-        <h2 className="mt-2 text-3xl font-black tracking-tight md:text-4xl">
-          Built for Developers.
-        </h2>
-        <p className="mt-4 max-w-xl text-slate-400">
+        <div className="flex w-fit border-b-2 border-white">
+          <span className="flex items-center bg-white px-3 font-mono text-xs font-bold uppercase tracking-widest text-black">
+            04
+          </span>
+          <h2 className="px-4 py-1 text-3xl font-black tracking-tight md:text-4xl">
+            Built for Developers.
+          </h2>
+        </div>
+        <p className="mt-4 max-w-xl text-white">
           One SDK call to verify a document&rsquo;s cryptographic proof
           against its on-chain anchor.
         </p>

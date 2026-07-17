@@ -40,7 +40,7 @@ export function ApiCredentials() {
     <section>
       <SectionHeader label="Credentials" title="API Credentials" />
       <div className="px-6 py-10 md:px-10">
-        <p className="max-w-lg font-mono text-sm text-slate-500">
+        <p className="max-w-lg font-mono text-sm">
           Generate a live secret key to authenticate anchor requests
           against the Axiom API.
         </p>
@@ -59,11 +59,11 @@ export function ApiCredentials() {
         </div>
 
         {keyState === "ready" && (
-          <div className="mt-6 flex max-w-xl border-2 border-black">
+          <div className="mt-6 flex max-w-xl rounded-none border-2 border-black">
             <input
               readOnly
               value={apiKey}
-              className="w-full bg-white px-4 py-4 font-mono text-sm text-black focus:outline-none"
+              className="w-full rounded-none bg-white px-4 py-4 font-mono text-sm text-black focus:outline-none"
             />
             <button
               onClick={handleCopy}
