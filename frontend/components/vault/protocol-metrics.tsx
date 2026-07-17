@@ -1,18 +1,25 @@
-interface Metric {
-  label: string;
-  value: string;
-}
+"use client";
 
-const METRICS: Metric[] = [
-  { label: "Total Value Anchored", value: "$142,500,000" },
-  { label: "Active Contracts", value: "34" },
-  { label: "Network", value: "Soroban Testnet" },
-];
+import { useLedgerStore } from "@/lib/useLedgerStore";
+import { calculateAssetValue, formatUsd } from "@/lib/format";
 
 export function ProtocolMetrics() {
+  const records = useLedgerStore();
+
+  const totalValueAnchored = records.reduce(
+    (sum, record) => sum + calculateAssetValue(record.hash),
+    0
+  );
+
+  const metrics = [
+    { label: "Total Value Anchored", value: formatUsd(totalValueAnchored) },
+    { label: "Active Contracts", value: String(records.length) },
+    { label: "Network", value: "Soroban Testnet" },
+  ];
+
   return (
     <div className="grid grid-cols-1 divide-y divide-black border-b border-black md:grid-cols-3 md:divide-x md:divide-y-0">
-      {METRICS.map((metric) => (
+      {metrics.map((metric) => (
         <div key={metric.label} className="px-6 py-10 md:px-10">
           <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
             {metric.label}
