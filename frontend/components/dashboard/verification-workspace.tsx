@@ -14,6 +14,7 @@ import {
   confirmTransaction,
   prepareAnchorProofTransaction,
   submitSignedTransaction,
+  translateContractError,
 } from "@/lib/soroban";
 import { downloadComplianceReceipt } from "@/lib/pdf";
 import { addRecord } from "@/lib/useLedgerStore";
@@ -123,8 +124,13 @@ export function VerificationWorkspace() {
         });
         setAnchorResult({ timestampIso: new Date().toISOString() });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        appendLine(`[ERROR] Transaction failed: ${message}`);
+        const translated = translateContractError(err);
+        if (translated) {
+          appendLine(translated);
+        } else {
+          const message = err instanceof Error ? err.message : "Unknown error";
+          appendLine(`[ERROR] Transaction failed: ${message}`);
+        }
       } finally {
         setIsAnchoring(false);
       }

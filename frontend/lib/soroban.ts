@@ -166,6 +166,51 @@ export async function queryVerifyProof(
   };
 }
 
+// The release WASM build strips the contract's custom panic string
+// (`panic!("hash already anchored")` in contracts/src/lib.rs) for
+// binary size, so it never reaches the RPC diagnostic dump. Confirmed
+// live against Testnet: a real duplicate-hash call actually throws
+// `HostError: Error(WasmVm, InvalidAction)` with a diagnostic event
+// reading `"VM call trapped: UnreachableCodeReached"` — no trace of
+// the original message. `anchor_proof` is the contract's only panic
+// path (`verify_proof` never panics, and every other input is
+// validated client-side before submission), so this generic VM-trap
+// signature is, in practice, always the duplicate-hash case.
+const DUPLICATE_HASH_SIGNATURE =
+  /already\s*anchored|UnreachableCodeReached|VM call trapped|Error\(WasmVm,\s*InvalidAction\)/i;
+
+// Anything else that looks like a network-level or resource failure
+// rather than a contract-level trap — these substrings are the ones a
+// raw Soroban/RPC error actually contains, not polished text meant
+// for a user.
+const CONTRACT_FAULT_SIGNATURE =
+  /\brevert\b|\btrap\b|panicked|timed? ?out|network|ECONNRESET|fetch failed|TRY_AGAIN_LATER|insufficient|\bgas\b/i;
+
+export const DUPLICATE_HASH_MESSAGE =
+  "[REJECTED] CRYPTOGRAPHIC ATTESTATION COLLISION // PROOF ALREADY EXISTS ON LEDGER. STATE IMMUTABILITY PRESERVED.";
+
+export const RPC_TRANSIT_MESSAGE =
+  "[FAILURE] INSUFFICIENT GAS OR NETWORK TIMEOUT // SOROBAN RPC TRANSIT INTERRUPTED.";
+
+/**
+ * Translates a raw Soroban/WASM error — a host trap, RPC diagnostic
+ * dump, or network timeout — into a clean, monochrome terminal alert
+ * instead of leaking a raw stack trace to the UI. Returns `null` when
+ * the error doesn't match a known contract/network failure signature,
+ * so the caller can fall back to its own generic message.
+ */
+export function translateContractError(err: unknown): string | null {
+  const message = err instanceof Error ? err.message : String(err);
+
+  if (DUPLICATE_HASH_SIGNATURE.test(message)) {
+    return DUPLICATE_HASH_MESSAGE;
+  }
+  if (CONTRACT_FAULT_SIGNATURE.test(message)) {
+    return RPC_TRANSIT_MESSAGE;
+  }
+  return null;
+}
+
 function describeTransactionResult(resultXdr?: xdr.TransactionResult): string {
   if (!resultXdr) return "Unknown transaction result.";
   try {
