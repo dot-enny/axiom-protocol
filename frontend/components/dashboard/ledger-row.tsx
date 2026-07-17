@@ -8,10 +8,11 @@ interface LedgerRowProps {
   hash: string;
   timestamp: string;
   issuer: string;
+  txHash?: string;
   delay?: number;
 }
 
-export function LedgerRow({ hash, timestamp, issuer, delay = 0 }: LedgerRowProps) {
+export function LedgerRow({ hash, timestamp, issuer, txHash, delay = 0 }: LedgerRowProps) {
   return (
     <motion.tr
       initial={{ opacity: 0, y: 12 }}
@@ -29,6 +30,20 @@ export function LedgerRow({ hash, timestamp, issuer, delay = 0 }: LedgerRowProps
       </td>
       <td className="px-6 py-4">{timestamp}</td>
       <td className="px-6 py-4">{truncateMiddle(issuer, 6, 6)}</td>
+      <td className="px-6 py-4">
+        {txHash ? (
+          <a
+            href={`https://stellar.expert/explorer/testnet/tx/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="cursor-pointer border border-black px-2 py-1 transition-colors duration-100 hover:bg-black hover:text-white"
+          >
+            {"[ TX ]"}
+          </a>
+        ) : (
+          "—"
+        )}
+      </td>
     </motion.tr>
   );
 }

@@ -14,7 +14,9 @@ const HASH_PATTERN = /^[a-f0-9]{64}$/i;
 
 function findLocalRecord(hash: string): ComplianceRecord | null {
   const local = getRecords().find((r) => r.hash === hash);
-  return local ? { issuer: local.issuer, timestampIso: local.timestamp } : null;
+  return local
+    ? { issuer: local.issuer, timestampIso: local.timestamp, txHash: local.txHash }
+    : null;
 }
 
 export function VerifyPanel() {
@@ -140,7 +142,7 @@ export function VerifyPanel() {
               </div>
             </div>
 
-            <AuditTrail timestampIso={record.timestampIso} />
+            <AuditTrail timestampIso={record.timestampIso} txHash={record.txHash} />
           </div>
         )}
 

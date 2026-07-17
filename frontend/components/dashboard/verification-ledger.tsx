@@ -22,7 +22,7 @@ export function VerificationLedger() {
       </div>
 
       <div className="overflow-x-auto border-b border-black">
-        <table className="w-full min-w-[720px] border-collapse font-mono text-sm">
+        <table className="w-full min-w-[880px] border-collapse font-mono text-sm">
           <thead className="border-b border-black">
             <tr className="text-left">
               <th className="px-6 py-4 font-mono text-xs font-normal uppercase tracking-widest md:px-10">
@@ -34,13 +34,16 @@ export function VerificationLedger() {
               <th className="px-6 py-4 font-mono text-xs font-normal uppercase tracking-widest">
                 Issuer Address
               </th>
+              <th className="px-6 py-4 font-mono text-xs font-normal uppercase tracking-widest">
+                Transaction
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-black">
             {records.length === 0 ? (
               <tr>
                 <td
-                  colSpan={3}
+                  colSpan={4}
                   className="px-6 py-6 font-mono text-xs uppercase tracking-widest md:px-10"
                 >
                   {"[ NO LOCAL RECORDS FOUND. AWAITING INPUT. ]"}
@@ -53,6 +56,7 @@ export function VerificationLedger() {
                   hash={record.hash}
                   timestamp={formatTimestamp(record.timestamp)}
                   issuer={record.issuer}
+                  txHash={record.txHash}
                   delay={i * 0.04}
                 />
               ))

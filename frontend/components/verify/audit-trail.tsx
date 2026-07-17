@@ -1,8 +1,11 @@
-import { formatTimestampWithSeconds } from "@/lib/format";
+import { formatTimestampWithSeconds, truncateMiddle } from "@/lib/format";
 
 interface AuditTrailProps {
   timestampIso: string;
+  txHash?: string;
 }
+
+const PROTOCOL_ESCROW_LABEL = "NODE 2: PROTOCOL ESCROW";
 
 interface TimelineNode {
   label: string;
@@ -21,7 +24,7 @@ const NODES: TimelineNode[] = [
     offsetMinutes: -2,
   },
   {
-    label: "NODE 2: PROTOCOL ESCROW",
+    label: PROTOCOL_ESCROW_LABEL,
     title: "Anchored to Soroban Smart Contract",
     subtext: `Contract ID: ${CONTRACT_ID}`,
     offsetMinutes: 0,
@@ -40,7 +43,7 @@ const NODES: TimelineNode[] = [
   },
 ];
 
-export function AuditTrail({ timestampIso }: AuditTrailProps) {
+export function AuditTrail({ timestampIso, txHash }: AuditTrailProps) {
   const baseMs = new Date(timestampIso).getTime();
 
   return (
@@ -67,6 +70,19 @@ export function AuditTrail({ timestampIso }: AuditTrailProps) {
               <p className="mt-1 break-all font-mono text-xs text-white">
                 {node.subtext}
               </p>
+              {node.label === PROTOCOL_ESCROW_LABEL && txHash && (
+                <p className="mt-1 font-mono text-xs text-white">
+                  View on Ledger:{" "}
+                  <a
+                    href={`https://stellar.expert/explorer/testnet/tx/${txHash}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cursor-pointer border border-white px-1 transition-colors duration-100 hover:bg-white hover:text-black"
+                  >
+                    {`[ ${truncateMiddle(txHash, 8, 6)} ]`}
+                  </a>
+                </p>
+              )}
               <p className="mt-2 font-mono text-xs text-white">
                 {formatTimestampWithSeconds(nodeTimeIso)}
               </p>
