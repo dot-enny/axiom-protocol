@@ -8,7 +8,6 @@ import type { Deal } from "@/components/deal-room/deal-room-workspace";
 
 interface ExecutionDetailProps {
   deal: Deal;
-  counterpartyAddress: string;
   counterpartySigned: boolean;
   isExecuting: boolean;
   onBack: () => void;
@@ -17,7 +16,6 @@ interface ExecutionDetailProps {
 
 export function ExecutionDetail({
   deal,
-  counterpartyAddress,
   counterpartySigned,
   isExecuting,
   onBack,
@@ -62,8 +60,8 @@ export function ExecutionDetail({
           signedLabel="VERIFIED"
         />
         <SignatureRow
-          role="Party 3 (Counterparty / You)"
-          address={counterpartyAddress}
+          role="Party 3 (Counterparty)"
+          address={deal.counterparty}
           signed={counterpartySigned}
           signedLabel="SIGNED"
         />

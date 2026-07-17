@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useWallet } from "@/components/dashboard/wallet-context";
 import { useLedgerStore } from "@/lib/useLedgerStore";
+import { generateMockStellarKey } from "@/lib/keys";
 import { PendingQueue } from "@/components/deal-room/pending-queue";
 import { ExecutionDetail } from "@/components/deal-room/execution-detail";
 import { ExecutionLog } from "@/components/deal-room/execution-log";
@@ -13,6 +13,7 @@ export interface Deal {
   assetType: string;
   issuer: string;
   auditor: string;
+  counterparty: string;
   requiredSigs: string;
   status: string;
 }
@@ -20,9 +21,9 @@ export interface Deal {
 type View = "queue" | "detail";
 
 // No real auditor/counterparty-review system exists yet — every real
-// anchor is treated as a deal awaiting multi-sig execution, with a
-// fixed mock auditor, per this session's task spec.
-const MOCK_AUDITOR = "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ";
+// anchor is treated as a deal awaiting multi-sig execution, with the
+// second and third signers deterministically derived from the deal's
+// own hash rather than hardcoded, per this session's task spec.
 const EXECUTE_DELAY_MS = 1200;
 
 export function DealRoomWorkspace() {
@@ -31,7 +32,6 @@ export function DealRoomWorkspace() {
   const [signedIds, setSignedIds] = useState<Set<string>>(new Set());
   const [isExecuting, setIsExecuting] = useState(false);
   const [terminalLines, setTerminalLines] = useState<string[]>([]);
-  const { address } = useWallet();
   const records = useLedgerStore();
 
   const deals: Deal[] = useMemo(
@@ -43,7 +43,8 @@ export function DealRoomWorkspace() {
           hash: record.hash,
           assetType: "RWA Compliance Anchor",
           issuer: record.issuer,
-          auditor: MOCK_AUDITOR,
+          auditor: generateMockStellarKey(record.hash, "auditor"),
+          counterparty: generateMockStellarKey(record.hash, "counterparty"),
           requiredSigs: signed ? "3/3" : "2/3",
           status: signed ? "Escrow Locked & Anchored" : "Action Required",
         };
@@ -88,7 +89,6 @@ export function DealRoomWorkspace() {
         <>
           <ExecutionDetail
             deal={selectedDeal}
-            counterpartyAddress={address ?? "Not connected"}
             counterpartySigned={signedIds.has(selectedDeal.id)}
             isExecuting={isExecuting}
             onBack={handleBack}

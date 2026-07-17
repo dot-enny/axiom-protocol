@@ -1,3 +1,5 @@
+import { truncateMiddle } from "@/lib/format";
+
 interface SignatureRowProps {
   role: string;
   address: string;
@@ -27,7 +29,10 @@ export function SignatureRow({ role, address, signed, signedLabel }: SignatureRo
         <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
           {role}
         </p>
-        <p className="mt-1 break-all font-mono text-sm">{address}</p>
+        <p className="mt-1 font-mono text-sm">
+          <span className="sm:hidden">{truncateMiddle(address, 6, 4)}</span>
+          <span className="hidden break-all sm:inline">{address}</span>
+        </p>
       </div>
       <SignatureBadge signed={signed} label={signedLabel} />
     </div>
