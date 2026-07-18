@@ -69,6 +69,86 @@ NEXT_PUBLIC_CONTRACT_ID=YOUR_CONTRACT_ID
 SERVER_SECRET_KEY=YOUR_ADMIN_SECRET_KEY
 ```
 
+## Developer SDK — Headless B2B Infrastructure
+
+Axiom isn't only a dashboard — it's compliance infrastructure other institutions'
+backends can integrate directly. `@axiom/sdk` (`/sdk`) is a lightweight TypeScript
+client that wraps the same `/api/v1/anchor` endpoint the dashboard itself calls,
+letting any Node.js or Edge service anchor a document hash headlessly, with no
+browser, no wallet extension, and no UI in the loop.
+
+```ts
+import * as path from "path";
+import { randomBytes } from "crypto";
+import * as dotenv from "dotenv";
+import { AxiomClient, AxiomAPIError } from "@axiom/sdk";
+
+// Loaded mainly so SERVER_SECRET_KEY is available in process.env if a
+// future example needs it — the SDK itself only ever needs the apiKey.
+dotenv.config({ path: path.resolve(__dirname, "../frontend/.env.local") });
+
+// The route only checks a Bearer token's *shape* (`ax_live_` prefix),
+// not a real issued/revocable key yet — see STATE.md "Not built yet".
+// This mirrors the same placeholder format the Developer Portal
+// generates client-side.
+const MOCK_API_KEY = "ax_live_dev_00000000000000000000000000000000";
+
+// A syntactically valid Stellar public key, standing in for whatever
+// institution's address a real integrator would pass here.
+const DUMMY_ISSUER = "GC5VAGVVDESX3OMJB6WI4IQDDYCQPFXKGZYRAIBW66NZVXEH7G63NLBQ";
+
+function dummyDocumentHash(): string {
+  return randomBytes(32).toString("hex");
+}
+
+(async () => {
+  console.log("[SYSTEM] INITIALIZING AXIOM SDK...");
+
+  const client = new AxiomClient({
+    apiKey: MOCK_API_KEY,
+    environment: "testnet",
+  });
+
+  try {
+    const receipt = await client.anchorDocument(
+      dummyDocumentHash(),
+      DUMMY_ISSUER
+    );
+    console.log("[SOROBAN] Anchor confirmed. Receipt:");
+    console.log(JSON.stringify(receipt, null, 2));
+  } catch (err) {
+    if (err instanceof AxiomAPIError) {
+      console.log(
+        `[FAILURE] AxiomAPIError (status ${err.status}): ${err.message}`
+      );
+    } else {
+      console.log("[FAILURE] Unexpected error:", err);
+    }
+  }
+})();
+```
+
+This exact script lives at [`examples/node-test.ts`](examples/node-test.ts). Run it
+for real:
+
+```bash
+cd sdk && npm install && npm run build
+cd ../examples && npm install && npm install ../sdk && npm start
+```
+
+A successful run anchors on Stellar Testnet and prints a real receipt:
+
+```json
+{
+  "transactionId": "9cd9d226bdffa7374691f9673c3d5bf3e5d0db02a02a9eb166bde14e0eae8674",
+  "hash": "8da03be3345d084c084342fe84d37f05b182e994f2dbd6da8f039a933604b1b8",
+  "status": "confirmed",
+  "network": "stellar-testnet",
+  "contractId": "CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK",
+  "timestamp": 1784362074
+}
+```
+
 ## Contributing
 We welcome developers to help scale Axiom. [Please see our contribution guide](CONTRIBUTING.md) for architecture guidelines, open issues, and submission processes.
 
