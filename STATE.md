@@ -1559,6 +1559,50 @@ recognize. `sdk/dist` and `sdk/node_modules` are gitignored, matching
 `frontend/`'s pattern; `sdk/package-lock.json` is committed, also
 matching `frontend/`'s pattern.
 
+**Session 28 — SDK test script + Developer SDK README section (2026-07-18)**
+A standalone `/examples` package proves `@axiom/sdk` genuinely works
+headlessly, outside the Next.js app entirely — not just "it compiles."
+
+- `examples/package.json` + `examples/tsconfig.json` — barebones
+  package, `@axiom/sdk` installed as a real `file:../sdk` dependency
+  (via `npm install ../sdk`, not hand-written), `dotenv`/`ts-node`/
+  `typescript` as devDependencies, a `start` script running
+  `ts-node node-test.ts`.
+- `examples/node-test.ts` — a self-executing async function: loads
+  `../frontend/.env.local` via `dotenv` (mainly so `SERVER_SECRET_KEY`
+  is available in `process.env` if a future example needs it — the
+  SDK itself only needs the `apiKey`), logs
+  `[SYSTEM] INITIALIZING AXIOM SDK...`, calls `anchorDocument` with a
+  fresh random 32-byte hex hash (so repeat runs never collide with a
+  previous run's anchor) and a hardcoded placeholder-but-syntactically-
+  valid Stellar public key, then either pretty-prints the resulting
+  `AxiomReceipt` or catches and cleanly logs an `AxiomAPIError`.
+
+**A real dependency-compatibility bug was hit and fixed during
+verification**: `npm install ts-node typescript` (no version pin)
+pulled `typescript@7.0.2` — freshly published, apparently a major
+breaking release — which crashes `ts-node@10.9.2` immediately
+(`TypeError: Cannot read properties of undefined (reading
+'fileExists')`, since ts-node's config loader expects the classic
+`ts.sys` compiler API surface that this new major version doesn't
+expose the same way). Fixed by pinning `typescript` back to `^5.9.3`
+(same major line `sdk/` already uses), which resolved cleanly.
+
+Verified for real end-to-end, more than once: with a live dev server
+running, `npm start` genuinely anchors a fresh dummy hash on Stellar
+Testnet through the real deployed contract and prints a real
+transaction receipt — this is a live proof the SDK, the API route, and
+the contract all interoperate correctly with zero Next.js UI in the
+loop. Also ran it with the dev server intentionally stopped (the
+realistic "first clone, haven't started anything yet" scenario) to
+confirm the script fails cleanly (a caught, logged `fetch failed` /
+`ECONNREFUSED`) instead of crashing unhandled.
+- Root `README.md` — new "Developer SDK — Headless B2B Infrastructure"
+  section, showcasing the exact `node-test.ts` source in a code block
+  plus the real receipt JSON captured from an actual run, framing
+  Axiom as B2B headless infrastructure any Node/Edge service can
+  integrate, not just a dashboard product.
+
 ## Not built yet
 
 - `@axiom/sdk` only wraps `anchorDocument` — no `verifyProof` read
