@@ -1,0 +1,27 @@
+{
+  "name": "@axiom/sdk",
+  "version": "0.1.0",
+  "description": "Official TypeScript SDK for the Axiom Protocol compliance-anchoring API.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [
+    "stellar",
+    "soroban",
+    "compliance",
+    "rwa",
+    "axiom"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
