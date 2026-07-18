@@ -6,7 +6,10 @@ This file is the running memory for Claude across sessions. Update the
 ## Architecture
 
 Monorepo: `frontend/` (Next.js 14 App Router, TypeScript, Tailwind v3) +
-`contracts/` (Rust/Soroban, single `cdylib` crate — see below).
+`contracts/` (Rust/Soroban, single `cdylib` crate — see below) +
+`sdk/` (`@axiom/sdk`, standalone TypeScript package wrapping the
+`/api/v1/anchor` REST API for external Node/Edge integrators — see
+below).
 Design system is Institutional Brutalism, defined in `.clauderules` —
 monochrome, sharp 1px borders, no gradients/soft shadows/rounded
 corners, enforced at the Tailwind config level (not just convention).
@@ -1506,8 +1509,63 @@ translation, and now the local file previewer) is built and verified
 for real. The core anchoring workspace (drop → preview → hash →
 anchor → receipt) is feature-complete.
 
+**Session 27 — `@axiom/sdk` scaffolded, core client implemented (2026-07-18)**
+Axiom gets its first external-facing surface beyond the dashboard
+itself: a standalone TypeScript package at `/sdk` (independent of
+`frontend/`'s `node_modules`, same pattern as `contracts/`) that wraps
+the headless `/api/v1/anchor` REST endpoint for Node/Edge integrators.
+
+- `sdk/package.json` — `@axiom/sdk` v0.1.0, `main`/`types` pointing at
+  `dist/index.js`/`dist/index.d.ts`, a single `typescript` devDependency,
+  `node >=18` engine constraint (for global `fetch`).
+- `sdk/tsconfig.json` — `target: ES2020`, `module: commonjs`,
+  `lib: ["ES2020", "DOM"]` (the `DOM` lib is only there for `fetch`/
+  `Response` typings, not for browser APIs — this still runs in
+  Node/Edge), declarations + source maps on, `rootDir: src` →
+  `outDir: dist`.
+- `sdk/src/index.ts` — exports `AxiomClient`, `AxiomAPIError`, and the
+  `AxiomClientConfig`/`AxiomReceipt` types. The constructor takes
+  `{ apiKey, environment?, baseUrl? }`; `environment` (`"testnet" |
+  "mainnet"`, defaults to `"testnet"`) selects a default base URL —
+  since there's no separately hosted Testnet API domain yet, `testnet`
+  defaults to the Next.js app's own local dev server
+  (`http://localhost:3000/api/v1`), overridable via `baseUrl` for a
+  real deployment. `anchorDocument(hash, issuerAddress)` POSTs to
+  `/anchor` with the real request shape the route expects (`{ hash,
+  issuer }`, not `issuerAddress` — the SDK's friendlier param name is
+  remapped internally), injects `Authorization: Bearer ${apiKey}`,
+  and maps the route's actual response shape (`{ id, txHash, status,
+  hash, ledger: { network, contract_id, timestamp } }`) into the
+  typed `AxiomReceipt`. Any non-2xx response throws `AxiomAPIError`
+  (`status`, `message`, raw `body`) built from the route's real `{
+  error: string }` error shape.
+
+Verified for real, not just compiled: ran `npm install` and `npm run
+build` inside `/sdk` — clean `tsc` build, real `dist/index.js` +
+`dist/index.d.ts` produced. Then exercised the built package against
+the actual running Next.js dev server (fresh instance, not a stale
+one) with a real funded Testnet keypair reused from earlier sessions:
+an invalid API key correctly throws `AxiomAPIError` with `status 401`
+and the route's real message; a malformed hash correctly throws with
+`status 400`; a real `anchorDocument` call with a fresh hash actually
+anchors on Testnet and returns a fully-populated `AxiomReceipt` with a
+real transaction hash, matching contract ID, and confirmed status; a
+second call with that same hash correctly throws `AxiomAPIError`
+(`status 400` — the duplicate panic is caught at the simulation stage
+before submission, so it's a 400 not a 500) with the same raw
+`HostError`/`UnreachableCodeReached` diagnostic text the terminal
+console's error translator (Session 25) already knows how to
+recognize. `sdk/dist` and `sdk/node_modules` are gitignored, matching
+`frontend/`'s pattern; `sdk/package-lock.json` is committed, also
+matching `frontend/`'s pattern.
+
 ## Not built yet
 
+- `@axiom/sdk` only wraps `anchorDocument` — no `verifyProof` read
+  method yet, no test suite, no published npm package (it's a local
+  scaffold only), and `mainnet`'s default base URL
+  (`https://api.axiom.sh/v1`) is a placeholder domain, not a real
+  deployment.
 - No real per-key auth or rate limiting on `/api/v1/anchor` — the
   Bearer check only validates a token *shape* (`ax_live_` prefix), not
   a real issued/revocable API key, and there's no persistence of which
