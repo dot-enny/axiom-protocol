@@ -1721,8 +1721,81 @@ anywhere in the full build log, and re-ran the release `wasm32v1-none`
 build afterward to confirm the `dev-dependencies`/`mod test` additions
 don't affect the production contract build (still compiles clean).
 
+**Session 31 — Anchor configuration panel + real declared-value TVL (2026-07-19)**
+Replaces the mocked, hash-derived TVL with a real user-declared value
+captured at anchor time, and adds the static input fields that will
+back a future dynamic multi-party escrow UI.
+
+- `frontend/components/dashboard/anchor-config.tsx` (new) — a
+  `border-2 border-black p-4 mt-4` panel rendered directly beneath the
+  Dropzone in `verification-workspace.tsx` (both wrapped in a shared
+  grid cell so it sits under the drop area at every viewport width,
+  not beside the terminal). Three fields: a "Required Signatures
+  (1-3)" number input (clamped in the change handler, not just via the
+  `min`/`max` HTML attributes, since browsers don't enforce those on
+  every input method), a "Declared Asset Value (USD)" number input,
+  and a "[ ]"/"[X] Non-Financial / Compliance Document" checkbox — a
+  real `<input type="checkbox">` for semantics/keyboard support, kept
+  `sr-only` with the bracket glyph as the visible custom indicator
+  (matching the bracket convention already used everywhere else in
+  this app, e.g. `[ TX ]`, `[ X ] REMOVE`). Checking it disables the
+  value input and forces its displayed value to 0. All inputs use
+  `focus:border-4` instead of a soft ring for "sharp focus states."
+- `frontend/components/dashboard/verification-workspace.tsx` — new
+  `threshold`/`assetValue`/`isNonFinancial` state, reset alongside the
+  other per-document state in both `handleFileDropped` and
+  `handleClear` (so a new document always starts from defaults rather
+  than inheriting the previous one's declared value). `runAnchor`
+  passes `value: isNonFinancial ? 0 : assetValue` and `threshold` into
+  `addRecord`, and gained them as `useCallback` dependencies. Note:
+  `threshold` is captured and persisted but not yet enforced on-chain
+  — the actual anchor call still goes through V1's single-issuer
+  `anchor_proof`, not the (unde­ployed) V2 `DealState` escrow from
+  Session 29/30. This is deliberately UI/data-model preparation only,
+  per the brief's own framing ("prepare the UI... using static input
+  fields").
+- `frontend/lib/useLedgerStore.ts` — `AnchorRecord` gains required
+  `value: number` and `threshold: number`. Records anchored before
+  this session won't have them in `localStorage`; display code guards
+  with `?? 0` rather than migrating old data, since this is a
+  prototype-phase, locally-persisted store, not a real database.
+- `frontend/lib/format.ts` — deleted the mock `calculateAssetValue`
+  (hash-seeded random-looking dollar figure) entirely.
+- `frontend/components/vault/protocol-metrics.tsx` +
+  `asset-ledger.tsx` — Total Value Anchored now sums real
+  `record.value ?? 0` across the ledger instead of a hash-derived mock;
+  the Asset Ledger table's TVL column shows the same raw value per row.
+  Non-financial documents (forced to `value: 0`) naturally don't
+  inflate TVL — no separate filtering needed, since the config panel
+  already enforces that invariant at the source.
+- Root `README.md` — new "### Dynamic Escrow & Valuation" subsection
+  under "Protocol Architecture" with the four required use cases
+  (Self-Attestation, Bilateral Agreements, Institutional Escrow,
+  Dynamic TVL).
+
+Verified for real in a live browser (Playwright + system Chrome): the
+config panel renders (with correct defaults, threshold `1` and value
+`0`) even before a file is dropped and sits directly under the drop
+area; typing `5` into the threshold field and blurring clamps it to
+`3`, typing `0` clamps it to `1`; setting a declared value then
+checking the non-financial box disables that input and visibly forces
+it to `0`, unchecking re-enables it. Seeded `localStorage` with three
+records — a $7.5M financial document, a $0 non-financial one, and a
+legacy record with no `value`/`threshold` at all (simulating
+pre-session data) — and confirmed the Vault's TVL metric correctly
+totals to exactly the financial record's $7,500,000, the table's TVL
+column shows each record's real raw value with zero `NaN` anywhere
+(the legacy record's `?? 0` fallback holds), and nothing is
+hash-derived anymore. `tsc --noEmit` and a full `next build` both pass
+clean with zero errors/warnings.
+
 ## Not built yet
 
+- The anchor config panel's "Required Signatures" threshold (Session
+  31) is captured and persisted but not enforced anywhere — anchoring
+  still goes through V1's single-issuer `anchor_proof`, not the V2
+  `DealState` escrow (see the next bullet), so a 3-of-3 requirement
+  today is purely cosmetic metadata.
 - `contracts/src/lib.rs`'s new `DealState` escrow functions
   (`propose_deal`/`approve_deal`/`execute_deal`/`get_deal`) are
   compiled, unit-tested, and interface-verified but not yet deployed
