@@ -17,7 +17,7 @@ const RESPONSE_EXAMPLE = `// 200 OK
   "hash": "cddf01e5b3...",
   "ledger": {
     "network": "stellar-testnet",
-    "contract_id": "CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK",
+    "contract_id": "CAH3EF2GDWWJTO24RRFUAPA4RB7DGJD36OSZSWKHBDFS3LHHYIERYO6X",
     "timestamp": 1720625198
   }
 }`;

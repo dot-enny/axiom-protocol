@@ -14,7 +14,7 @@ interface TimelineNode {
   offsetMinutes: number;
 }
 
-const CONTRACT_ID = "CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK";
+const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID ?? "unknown";
 
 const NODES: TimelineNode[] = [
   {

@@ -10,7 +10,7 @@ interface NavLink {
   external?: boolean;
 }
 
-const CONTRACT_ID = "CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK";
+const CONTRACT_ID = process.env.NEXT_PUBLIC_CONTRACT_ID ?? "unknown";
 const DEAL_ROOM_HREF = "/deal-room";
 
 const NAV_LINKS: NavLink[] = [
