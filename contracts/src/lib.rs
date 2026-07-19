@@ -9,6 +9,9 @@
 
 use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env, String};
 
+#[cfg(test)]
+mod test;
+
 /// Roughly one day of ledgers, assuming a ~5 second average ledger
 /// close time (86,400s / 5s).
 const DAY_IN_LEDGERS: u32 = 17_280;
