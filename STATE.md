@@ -1603,8 +1603,87 @@ confirm the script fails cleanly (a caught, logged `fetch failed` /
   Axiom as B2B headless infrastructure any Node/Edge service can
   integrate, not just a dashboard product.
 
+**Session 29 — V2 Rust Protocol: on-chain multi-party deal escrow (2026-07-19)**
+`contracts/src/lib.rs` gains a second, independent feature alongside
+the existing compliance-anchor logic: an on-chain escrow for deals
+that require an issuer's proposal plus separate auditor and
+counterparty approvals before execution. `anchor_proof`/`verify_proof`/
+`ComplianceRecord` are untouched — the brief only specified new
+structures and functions, and removing the existing ones would break
+the deployed frontend, the SDK, and the example script, none of which
+this session touched.
+
+- `DealState` (`#[contracttype]`): `issuer`/`auditor`/`counterparty:
+  Address`, `auditor_approved`/`counterparty_approved: bool`,
+  `executed_at: u64` (0 while pending).
+- `DataKey` (`#[contracttype] enum`): `Deal(BytesN<32>)` — a separate
+  storage key namespace from `ComplianceRecord`'s flat `String`-keyed
+  entries, so a document hash and a deal hash can never collide even
+  if they happened to coincide.
+- `AxiomContract::propose_deal(env, hash, issuer, auditor,
+  counterparty)` — `issuer.require_auth()`, panics if a deal already
+  exists for `hash`, otherwise writes a fresh `DealState` with both
+  approvals `false` and `executed_at: 0`.
+- `AxiomContract::approve_deal(env, hash, signer)` —
+  `signer.require_auth()`, panics if the deal doesn't exist or has
+  already executed; flips `auditor_approved` or
+  `counterparty_approved` depending on which party `signer` matches,
+  panics if `signer` is neither.
+- `AxiomContract::execute_deal(env, hash, caller)` —
+  `caller.require_auth()`, panics unless both approvals are `true`,
+  then stamps `executed_at` with `env.ledger().timestamp()`.
+- `AxiomContract::get_deal(env, hash) -> DealState` — read-only
+  lookup, panics if no deal was ever proposed for `hash` (unlike
+  `verify_proof`, which returns `None` instead of panicking — a deal
+  query is expected to target a hash the caller already knows exists,
+  whereas verification is deliberately speculative).
+- All three mutating functions also extend the same ~30-day TTL
+  (`TTL_THRESHOLD`/`TTL_EXTEND_TO`) that `anchor_proof` already uses,
+  applied here too so a long-running multi-party negotiation's storage
+  doesn't silently expire mid-flow.
+
+**A real environment issue was hit and fixed, not just the code**:
+`cargo build --target wasm32-unknown-unknown --release` (the literal
+command in the brief) fails outright on this machine's Rust 1.96 —
+`soroban-sdk`'s own build script rejects `wasm32-unknown-unknown` on
+Rust 1.82+, since that target now enables WASM features
+(`reference-types`, `multi-value`) Soroban's host doesn't yet support,
+and directs callers to `wasm32v1-none` instead. This exact substitution
+was already documented in this file's Session 3 entry, so the build
+was run against the real target instead of the one literally named in
+the brief. A `cargo clean` forced a fully-from-scratch rebuild to rule
+out warnings hidden by incremental caching, which also re-triggered
+this repo's other pre-documented Windows quirk (the PATH's first
+`x86_64-w64-mingw32-gcc` resolving to an LLVM-based MinGW that can't
+link host build-scripts) — worked around by prepending
+`/c/msys64/ucrt64/bin` (a real GNU-toolchain MinGW environment already
+installed on this machine) for that invocation, per the fix pattern in
+`contracts/README.md`.
+
+Verified for real: a genuinely clean (`cargo clean` first) `cargo
+build --target wasm32v1-none --release` compiles with zero warnings,
+producing `target/wasm32v1-none/release/axiom_contract.wasm` (6,874
+bytes, up from 1,697 with just the two V1 functions). Ran `stellar
+contract info interface --wasm ...` against the actual compiled
+artifact (not just read back the source) and confirmed all six
+functions — `anchor_proof`, `verify_proof`, `propose_deal`,
+`approve_deal`, `execute_deal`, `get_deal` — are exported with exactly
+the specified signatures, and that `DealState`/`DataKey` appear in the
+contract's real spec. Not deployed to Testnet and no unit tests were
+added — the brief's Task 3 asked specifically for a clean compile plus
+this update, not a redeploy (which would be a separate, more
+consequential action — a new contract ID — better done as its own
+explicit step) or a test suite (a pre-existing "Not built yet" gap,
+still open).
+
 ## Not built yet
 
+- `contracts/src/lib.rs`'s new `DealState` escrow functions
+  (`propose_deal`/`approve_deal`/`execute_deal`/`get_deal`) are
+  compiled and interface-verified but not yet deployed to Testnet —
+  the currently deployed `NEXT_PUBLIC_CONTRACT_ID` still only runs the
+  old two-function WASM. The frontend's Deal Room still uses local/
+  mock signer state (Sessions 11/19), not this on-chain escrow.
 - `@axiom/sdk` only wraps `anchorDocument` — no `verifyProof` read
   method yet, no test suite, no published npm package (it's a local
   scaffold only), and `mainnet`'s default base URL
