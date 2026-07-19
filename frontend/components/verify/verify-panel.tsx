@@ -5,28 +5,42 @@ import type { FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { AuditTrail } from "@/components/verify/audit-trail";
-import { queryVerifyProof, type ComplianceRecord } from "@/lib/soroban";
+import { useWallet } from "@/components/dashboard/wallet-context";
+import { queryDealState, type DealState } from "@/lib/soroban";
 import { getRecords } from "@/lib/useLedgerStore";
 
 type QueryState = "idle" | "loading" | "found" | "rejected";
 
 const HASH_PATTERN = /^[a-f0-9]{64}$/i;
 
-function findLocalRecord(hash: string): ComplianceRecord | null {
+// Best-effort degrade path for when the chain read itself fails
+// (network error) — the local ledger only ever knows about deals this
+// browser proposed, and doesn't track approvals/execution, so this is
+// necessarily an approximation: it reports the deal as still pending
+// with no approvals recorded, never as executed.
+function findLocalRecord(hash: string): DealState | null {
   const local = getRecords().find((r) => r.hash === hash);
-  return local
-    ? { issuer: local.issuer, timestampIso: local.timestamp, txHash: local.txHash }
-    : null;
+  if (!local) return null;
+  return {
+    signers: [local.issuer],
+    approvals: [],
+    threshold: local.threshold,
+    executedAt: 0,
+  };
 }
 
 export function VerifyPanel() {
   const searchParams = useSearchParams();
+  const { address } = useWallet();
   const [hashInput, setHashInput] = useState("");
   const [queryState, setQueryState] = useState<QueryState>("idle");
-  const [record, setRecord] = useState<ComplianceRecord | null>(null);
+  const [dealState, setDealState] = useState<DealState | null>(null);
   const [detail, setDetail] = useState<string | null>(null);
   const [formatWarning, setFormatWarning] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [approveMessage, setApproveMessage] = useState<string | null>(null);
   const hasAutoRun = useRef(false);
+  const lastQueriedHash = useRef<string | null>(null);
 
   async function handleVerify(rawHash: string) {
     const hash = rawHash.trim().toLowerCase();
@@ -38,13 +52,15 @@ export function VerifyPanel() {
     setFormatWarning(false);
 
     setQueryState("loading");
-    setRecord(null);
+    setDealState(null);
     setDetail(null);
+    setApproveMessage(null);
+    lastQueriedHash.current = hash;
 
     try {
-      const result = (await queryVerifyProof(hash)) ?? findLocalRecord(hash);
+      const result = (await queryDealState(hash)) ?? findLocalRecord(hash);
       if (result) {
-        setRecord(result);
+        setDealState(result);
         setQueryState("found");
       } else {
         setQueryState("rejected");
@@ -52,12 +68,55 @@ export function VerifyPanel() {
     } catch (err) {
       const local = findLocalRecord(hash);
       if (local) {
-        setRecord(local);
+        setDealState(local);
         setQueryState("found");
         return;
       }
       setDetail(err instanceof Error ? err.message : "Unknown error");
       setQueryState("rejected");
+    }
+  }
+
+  async function handleApprove() {
+    const hash = lastQueriedHash.current;
+    if (!hash) return;
+
+    const signerAddress =
+      address ?? window.prompt("Enter your Stellar wallet address to approve this deal:");
+    if (!signerAddress) return;
+
+    setIsApproving(true);
+    setApproveMessage(null);
+
+    try {
+      const response = await fetch("/api/v1/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hash, signerAddress }),
+      });
+      const body: unknown = await response.json().catch(() => undefined);
+
+      if (!response.ok) {
+        const message =
+          body && typeof body === "object" && "error" in body
+            ? String((body as { error: unknown }).error)
+            : `Request failed with status ${response.status}`;
+        setApproveMessage(`[ERROR] ${message}`);
+        return;
+      }
+
+      setApproveMessage(
+        (body as { executed?: boolean }).executed
+          ? "[SOROBAN] Approval recorded — threshold met, deal executed."
+          : "[SOROBAN] Approval recorded. Awaiting further signatures."
+      );
+      await handleVerify(hash);
+    } catch (err) {
+      setApproveMessage(
+        `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
+      );
+    } finally {
+      setIsApproving(false);
     }
   }
 
@@ -120,29 +179,74 @@ export function VerifyPanel() {
           </p>
         )}
 
-        {queryState === "found" && record && (
+        {queryState === "found" && dealState && dealState.executedAt > 0 && (
           <div className="rounded-none border-2 border-black bg-black p-6 text-white">
             <p className="font-mono text-2xl font-bold uppercase tracking-tight sm:text-3xl">
-              Verified: Anchor Record Found
+              {"[ VERIFIED & EXECUTED ]"}
             </p>
             <div className="mt-6 flex flex-col gap-4 border-t border-white pt-6">
               <div>
                 <p className="font-mono text-xs uppercase tracking-widest">
-                  Issuer Wallet Address
+                  Authorized Signers ({dealState.signers.length})
                 </p>
-                <p className="mt-1 break-all font-mono text-sm">
-                  {record.issuer}
-                </p>
+                <ul className="mt-1 flex flex-col gap-1">
+                  {dealState.signers.map((signer) => (
+                    <li key={signer} className="break-all font-mono text-sm">
+                      {signer}
+                    </li>
+                  ))}
+                </ul>
               </div>
               <div>
                 <p className="font-mono text-xs uppercase tracking-widest">
-                  UTC Timestamp of Anchor
+                  UTC Timestamp of Execution
                 </p>
-                <p className="mt-1 font-mono text-sm">{record.timestampIso}</p>
+                <p className="mt-1 font-mono text-sm">
+                  {new Date(dealState.executedAt * 1000).toISOString()}
+                </p>
               </div>
             </div>
 
-            <AuditTrail timestampIso={record.timestampIso} txHash={record.txHash} />
+            <AuditTrail
+              timestampIso={new Date(dealState.executedAt * 1000).toISOString()}
+            />
+          </div>
+        )}
+
+        {queryState === "found" && dealState && dealState.executedAt === 0 && (
+          <div className="rounded-none border-4 border-black bg-white p-6 text-black">
+            <p className="font-mono text-2xl font-bold uppercase tracking-tight sm:text-3xl">
+              {`[ PENDING ESCROW: ${dealState.approvals.length} / ${dealState.threshold} SIGNATURES ]`}
+            </p>
+            <div className="mt-6 border-t-2 border-black pt-6">
+              <p className="font-mono text-xs uppercase tracking-widest">
+                Authorized Signers
+              </p>
+              <ul className="mt-2 flex flex-col gap-2">
+                {dealState.signers.map((signer) => (
+                  <li key={signer} className="font-mono text-sm">
+                    <span className="mr-2 font-bold">
+                      {dealState.approvals.includes(signer) ? "[X]" : "[ ]"}
+                    </span>
+                    <span className="break-all">{signer}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <Button
+              onClick={handleApprove}
+              disabled={isApproving}
+              className="mt-6 w-full py-5 text-sm"
+            >
+              {isApproving ? "Submitting Approval..." : "[ APPROVE DEAL ]"}
+            </Button>
+
+            {approveMessage && (
+              <p className="mt-4 font-mono text-xs uppercase tracking-widest">
+                {approveMessage}
+              </p>
+            )}
           </div>
         )}
 
