@@ -12,6 +12,10 @@ export interface AnchorRecord {
   issuer: string;
   timestamp: string;
   txHash?: string;
+  /** Declared USD value at anchor time; 0 for non-financial/compliance documents. */
+  value: number;
+  /** Required-signature threshold (1-3) configured at anchor time. */
+  threshold: number;
 }
 
 type Listener = () => void;

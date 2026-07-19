@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { signTransaction } from "@stellar/freighter-api";
 import { Networks } from "@stellar/stellar-sdk";
+import { AnchorConfig } from "@/components/dashboard/anchor-config";
 import { Dropzone } from "@/components/dashboard/dropzone";
 import { TerminalConsole } from "@/components/dashboard/terminal-console";
 import { Button } from "@/components/ui/button";
@@ -53,6 +54,9 @@ export function VerificationWorkspace() {
   // pipeline can resume automatically once the modal's connect succeeds
   // instead of making the user click "Anchor" a second time.
   const [pendingAnchor, setPendingAnchor] = useState(false);
+  const [threshold, setThreshold] = useState(1);
+  const [assetValue, setAssetValue] = useState(0);
+  const [isNonFinancial, setIsNonFinancial] = useState(false);
   const {
     address,
     state: walletState,
@@ -85,6 +89,9 @@ export function VerificationWorkspace() {
     setTerminalLines([]);
     setAnchorResult(null);
     setPendingAnchor(false);
+    setThreshold(1);
+    setAssetValue(0);
+    setIsNonFinancial(false);
     setStatus("processing");
   }
 
@@ -96,6 +103,9 @@ export function VerificationWorkspace() {
     setTerminalLines([]);
     setAnchorResult(null);
     setPendingAnchor(false);
+    setThreshold(1);
+    setAssetValue(0);
+    setIsNonFinancial(false);
   }
 
   const runAnchor = useCallback(
@@ -129,6 +139,8 @@ export function VerificationWorkspace() {
           hash: targetFile.hash,
           issuer: issuerAddress,
           txHash,
+          value: isNonFinancial ? 0 : assetValue,
+          threshold,
         });
         setAnchorResult({ timestampIso: new Date().toISOString() });
       } catch (err) {
@@ -143,7 +155,7 @@ export function VerificationWorkspace() {
         setIsAnchoring(false);
       }
     },
-    [appendLine]
+    [appendLine, threshold, assetValue, isNonFinancial]
   );
 
   function handleAnchorClick() {
@@ -180,13 +192,24 @@ export function VerificationWorkspace() {
   return (
     <div className="border-b border-black">
       <div className="grid grid-cols-1 divide-y divide-black md:grid-cols-2 md:divide-x md:divide-y-0">
-        <Dropzone
-          status={status}
-          file={file}
-          isAnchoring={isAnchoring}
-          onFileDropped={handleFileDropped}
-          onClear={handleClear}
-        />
+        <div>
+          <Dropzone
+            status={status}
+            file={file}
+            isAnchoring={isAnchoring}
+            onFileDropped={handleFileDropped}
+            onClear={handleClear}
+          />
+          <AnchorConfig
+            threshold={threshold}
+            onThresholdChange={setThreshold}
+            assetValue={assetValue}
+            onAssetValueChange={setAssetValue}
+            isNonFinancial={isNonFinancial}
+            onNonFinancialChange={setIsNonFinancial}
+            disabled={isAnchoring || Boolean(anchorResult)}
+          />
+        </div>
         <TerminalConsole
           status={status}
           file={file}
