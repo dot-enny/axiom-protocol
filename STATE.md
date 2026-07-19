@@ -1814,11 +1814,12 @@ that field being purely cosmetic. `anchor_proof`/`verify_proof`/
   `approvals` vector.
 - `AxiomContract::approve_deal(env, hash, caller)` —
   `caller.require_auth()`, panics if the deal doesn't exist, has
-  already executed, `caller` isn't in `signers` ("Signer is not a
-  party to this deal"), or `caller` already appears in `approvals`
-  ("Signer has already approved this deal" — Sybil protection, so one
-  address can't inflate the count by approving twice). Otherwise
-  pushes `caller` onto `approvals`.
+  already executed, `caller` isn't in `signers` ("Unauthorized: ..."),
+  or `caller` already appears in `approvals` ("Already signed: ..." —
+  Sybil protection, so one address can't inflate the count by
+  approving twice). Otherwise pushes `caller` onto `approvals`. (Panic
+  strings were revised in Session 33 to short, greppable prefixes — see
+  below.)
 - `AxiomContract::execute_deal(env, hash, caller)` —
   `caller.require_auth()`, panics if the deal doesn't exist, has
   already executed, or `approvals.len() < threshold` ("Deal is missing
@@ -1849,6 +1850,47 @@ build log. Not deployed to Testnet — same reasoning as Session 29,
 redeploying (a new contract ID) is a separate, more consequential step
 than this session's brief asked for.
 
+**Session 33 — V2 Rust Protocol test suite: mathematically verifying
+the m-of-n threshold logic (2026-07-19)**
+`contracts/src/test.rs` rewritten around three named business scenarios
+plus the security-invariant panics, replacing Session 30's generic
+"2-of-3" test names now that Session 32 made the escrow genuinely
+dynamic. `#[cfg(test)] mod test;` in `lib.rs` was already in place from
+Session 30, so no lib.rs wiring change was needed there — but writing
+these tests surfaced a real mismatch: this session's brief specifies
+exact `#[should_panic(expected = "...")]` strings ("Unauthorized",
+"Already signed", "Not fully approved", "Invalid threshold") that
+didn't match Session 32's actual panic messages ("Signer is not a
+party to this deal", "Signer has already approved this deal", "Deal is
+missing required approvals", "Threshold must be greater than
+zero"/"Threshold cannot exceed the number of signers"). Rather than
+write tests against strings the contract doesn't actually produce
+(`should_panic(expected = ...)` is a substring match against the real
+panic payload — a mismatched string fails the test), `lib.rs`'s panic
+messages were updated to lead with these short, greppable prefixes
+(`"Unauthorized: signer is not a party to this deal"`, `"Already
+signed: ..."`, `"Not fully approved: ..."`, `"Invalid threshold: must
+be greater than zero"` / `"Invalid threshold: exceeds the number of
+signers"`), keeping the descriptive detail after the prefix. Safe to
+change since the V2 escrow has never been deployed to Testnet.
+
+Seven tests: `test_1_of_1_solo_execution` (single self-approving
+signer, threshold 1), `test_2_of_2_bilateral_execution` (two signers,
+both must approve), `test_2_of_3_threshold_execution` (three-signer
+pool, only two approve — including one signer, the "buyer", left out
+entirely — and execution still succeeds because 2 >= threshold),
+`test_unauthorized_approval_panics`, `test_duplicate_approval_panics`
+(Sybil protection), `test_premature_execution_panics` (approvals below
+threshold), `test_invalid_threshold_panics` (threshold exceeding the
+signer pool size at `propose_deal` time).
+
+Verified for real: `PATH="/c/msys64/ucrt64/bin:$PATH" cargo test` — all
+7 tests genuinely pass (`test result: ok. 7 passed; 0 failed`), zero
+warnings. Re-ran the release build afterward (`cargo build --target
+wasm32v1-none --release`) to confirm the panic-message wording change
+doesn't affect the production wasm's shape — still compiles clean,
+same 6,246-byte artifact as Session 32.
+
 ## Not built yet
 
 - The anchor config panel's "Required Signatures" threshold (Session
@@ -1858,11 +1900,12 @@ than this session's brief asked for.
   requirement today is purely cosmetic metadata.
 - `contracts/src/lib.rs`'s V2 `DealState` m-of-n escrow functions
   (`propose_deal`/`approve_deal`/`execute_deal`/`get_deal`, reworked in
-  Session 32 from Session 29's fixed three-role design) are compiled
-  and unit-tested but not yet deployed to Testnet — the currently
-  deployed `NEXT_PUBLIC_CONTRACT_ID` still only runs the old
-  two-function WASM. The frontend's Deal Room still uses local/mock
-  signer state (Sessions 11/19), not this on-chain escrow.
+  Session 32 from Session 29's fixed three-role design, test suite
+  rewritten in Session 33) are compiled and unit-tested but not yet
+  deployed to Testnet — the currently deployed `NEXT_PUBLIC_CONTRACT_ID`
+  still only runs the old two-function WASM. The frontend's Deal Room
+  still uses local/mock signer state (Sessions 11/19), not this
+  on-chain escrow.
 - `@axiom/sdk` only wraps `anchorDocument` — no `verifyProof` read
   method yet, no test suite, no published npm package (it's a local
   scaffold only), and `mainnet`'s default base URL
