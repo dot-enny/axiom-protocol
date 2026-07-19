@@ -114,10 +114,10 @@ impl AxiomContract {
         proposer.require_auth();
 
         if threshold == 0 {
-            panic!("Threshold must be greater than zero");
+            panic!("Invalid threshold: must be greater than zero");
         }
         if threshold > signers.len() {
-            panic!("Threshold cannot exceed the number of signers");
+            panic!("Invalid threshold: exceeds the number of signers");
         }
 
         let key = DataKey::Deal(hash);
@@ -154,10 +154,10 @@ impl AxiomContract {
             panic!("Deal already executed");
         }
         if !state.signers.contains(&caller) {
-            panic!("Signer is not a party to this deal");
+            panic!("Unauthorized: signer is not a party to this deal");
         }
         if state.approvals.contains(&caller) {
-            panic!("Signer has already approved this deal");
+            panic!("Already signed: signer has already approved this deal");
         }
 
         state.approvals.push_back(caller);
@@ -184,7 +184,7 @@ impl AxiomContract {
             panic!("Deal already executed");
         }
         if state.approvals.len() < state.threshold {
-            panic!("Deal is missing required approvals");
+            panic!("Not fully approved: deal is missing required approvals");
         }
 
         state.executed_at = env.ledger().timestamp();
