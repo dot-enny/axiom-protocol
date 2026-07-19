@@ -32,6 +32,15 @@ export interface ComplianceRecord {
   txHash?: string;
 }
 
+/** The on-chain state of a V2 m-of-n deal escrow, as returned by `get_deal`. */
+export interface DealState {
+  signers: string[];
+  approvals: string[];
+  threshold: number;
+  /** 0 while pending; the ledger timestamp once `execute_deal` has run. */
+  executedAt: number;
+}
+
 function getContractId(): string {
   const contractId = process.env.NEXT_PUBLIC_CONTRACT_ID;
   if (!contractId) {
@@ -109,6 +118,66 @@ export async function buildProposeDealTransaction(
         Address.fromString(proposerAddress).toScVal(),
         xdr.ScVal.scvVec(signers.map((s) => Address.fromString(s).toScVal())),
         xdr.ScVal.scvU32(threshold)
+      )
+    )
+    .setTimeout(30)
+    .build();
+}
+
+/**
+ * Builds an unsigned `approve_deal` invocation — records `callerAddress`'s
+ * approval of the deal escrow for `hash`. `sourceAddress` pays the fee and
+ * signs the envelope; `callerAddress` (defaults to `sourceAddress`) is the
+ * on-chain `caller` argument whose `require_auth()` must be satisfied (see
+ * `buildProposeDealTransaction`'s doc comment for why those two only
+ * genuinely differ when `sourceAddress` can actually authorize on
+ * `callerAddress`'s behalf).
+ */
+export async function buildApproveDealTransaction(
+  sourceAddress: string,
+  hash: string,
+  callerAddress: string = sourceAddress
+): Promise<Transaction> {
+  const account = await server.getAccount(sourceAddress);
+  const contract = new Contract(getContractId());
+
+  return new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      contract.call(
+        "approve_deal",
+        xdr.ScVal.scvBytes(Buffer.from(hash, "hex")),
+        Address.fromString(callerAddress).toScVal()
+      )
+    )
+    .setTimeout(30)
+    .build();
+}
+
+/**
+ * Builds an unsigned `execute_deal` invocation — settles the deal escrow
+ * for `hash` once enough approvals are in. Same `sourceAddress`/
+ * `callerAddress` split as `buildApproveDealTransaction`.
+ */
+export async function buildExecuteDealTransaction(
+  sourceAddress: string,
+  hash: string,
+  callerAddress: string = sourceAddress
+): Promise<Transaction> {
+  const account = await server.getAccount(sourceAddress);
+  const contract = new Contract(getContractId());
+
+  return new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      contract.call(
+        "execute_deal",
+        xdr.ScVal.scvBytes(Buffer.from(hash, "hex")),
+        Address.fromString(callerAddress).toScVal()
       )
     )
     .setTimeout(30)
@@ -206,18 +275,70 @@ export async function queryVerifyProof(
   };
 }
 
+/**
+ * Read-only lookup of a hash's V2 deal escrow state via `get_deal` — the
+ * "Read Gap" fix: the Verify Portal now understands `DealState` (a pool
+ * of `signers`, who's `approved` so far, the `threshold`, and whether
+ * `execute_deal` has run) instead of only the old flat `ComplianceRecord`.
+ * Simulates rather than submits — no signature, no fee, no ledger write.
+ *
+ * Unlike `verify_proof`, the contract's `get_deal` panics
+ * (`.expect("Deal does not exist")`) when `hash` was never proposed,
+ * rather than returning `None` — so a never-anchored hash surfaces here
+ * as the same generic VM-trap simulation error described below, which
+ * this function treats as "not found" (`null`) rather than a real
+ * failure. Any other simulation error (a genuine network/resource fault)
+ * still propagates as a thrown error.
+ */
+export async function queryDealState(hash: string): Promise<DealState | null> {
+  const contract = new Contract(getContractId());
+  const account = new Account(READ_ONLY_SOURCE, "0");
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      contract.call("get_deal", xdr.ScVal.scvBytes(Buffer.from(hash, "hex")))
+    )
+    .setTimeout(30)
+    .build();
+
+  const simulated = await server.simulateTransaction(tx);
+
+  if (rpc.Api.isSimulationError(simulated)) {
+    if (DUPLICATE_HASH_SIGNATURE.test(simulated.error)) {
+      return null;
+    }
+    throw new Error(simulated.error);
+  }
+  if (!rpc.Api.isSimulationSuccess(simulated) || !simulated.result) {
+    return null;
+  }
+
+  const state = scValToNative(simulated.result.retval);
+  if (!state) return null;
+
+  return {
+    signers: state.signers as string[],
+    approvals: state.approvals as string[],
+    threshold: Number(state.threshold),
+    executedAt: Number(state.executed_at),
+  };
+}
+
 // The release WASM build strips the contract's custom panic strings
-// (`contracts/src/lib.rs`'s `panic!(...)` calls, in both `anchor_proof`
-// and the V2 `propose_deal`/`approve_deal`/`execute_deal` escrow) for
-// binary size, so they never reach the RPC diagnostic dump. Confirmed
-// live against Testnet: a real duplicate-hash call actually throws
-// `HostError: Error(WasmVm, InvalidAction)` with a diagnostic event
-// reading `"VM call trapped: UnreachableCodeReached"` — no trace of
-// the original message. `verify_proof`/`get_deal` never panic on their
-// own (they're read-only), and every other input is validated
-// client-side before submission, so this generic VM-trap signature is,
-// in practice, always a contract-level rejection (duplicate hash,
-// re-proposed deal, etc.) rather than a malformed call.
+// (`contracts/src/lib.rs`'s `panic!(...)`/`.expect(...)` calls, across
+// `anchor_proof` and the V2 `propose_deal`/`approve_deal`/`execute_deal`/
+// `get_deal` escrow) for binary size, so they never reach the RPC
+// diagnostic dump. Confirmed live against Testnet: a real duplicate-hash
+// call actually throws `HostError: Error(WasmVm, InvalidAction)` with a
+// diagnostic event reading `"VM call trapped: UnreachableCodeReached"` —
+// no trace of the original message. `verify_proof` never panics on its
+// own (it's read-only over an `Option`), but `get_deal` does — it
+// `.expect()`s the deal to exist — so `queryDealState` above relies on
+// this exact generic VM-trap signature to distinguish "never proposed"
+// from a real network/resource fault.
 const DUPLICATE_HASH_SIGNATURE =
   /already\s*anchored|UnreachableCodeReached|VM call trapped|Error\(WasmVm,\s*InvalidAction\)/i;
 
