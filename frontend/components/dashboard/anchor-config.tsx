@@ -7,6 +7,9 @@ interface AnchorConfigProps {
   onAssetValueChange: (value: number) => void;
   isNonFinancial: boolean;
   onNonFinancialChange: (value: boolean) => void;
+  /** One entry per counterparty beyond the connected wallet — length is always `threshold - 1`. */
+  counterparties: string[];
+  onCounterpartyChange: (index: number, value: string) => void;
   disabled?: boolean;
 }
 
@@ -20,6 +23,8 @@ export function AnchorConfig({
   onAssetValueChange,
   isNonFinancial,
   onNonFinancialChange,
+  counterparties,
+  onCounterpartyChange,
   disabled = false,
 }: AnchorConfigProps) {
   return (
@@ -80,6 +85,30 @@ export function AnchorConfig({
         </span>
         Non-Financial / Compliance Document
       </label>
+
+      {counterparties.length > 0 && (
+        <div className="mt-4 flex flex-col gap-4 border-t-2 border-black pt-4">
+          {counterparties.map((value, index) => (
+            <div key={index}>
+              <label
+                htmlFor={`counterparty-${index}`}
+                className="block font-mono text-xs uppercase tracking-widest"
+              >
+                Counterparty Address {index + 1}
+              </label>
+              <input
+                id={`counterparty-${index}`}
+                type="text"
+                value={value}
+                disabled={disabled}
+                placeholder="G..."
+                onChange={(e) => onCounterpartyChange(index, e.target.value)}
+                className={INPUT_CLASS}
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

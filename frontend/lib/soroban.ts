@@ -1,3 +1,4 @@
+import { Buffer } from "buffer";
 import {
   Account,
   Address,
@@ -74,15 +75,54 @@ export async function buildAnchorProofTransaction(
 }
 
 /**
+ * Builds an unsigned `propose_deal` invocation against the real deployed
+ * V2 escrow contract — the m-of-n replacement for the old single-issuer
+ * `anchor_proof` call. Proposes `hash` with the given `signers` pool and
+ * `threshold`; it does not itself approve or execute the deal (a 1-of-1
+ * proposal still needs a follow-up `approve_deal`/`execute_deal` to
+ * settle — not yet wired into this pipeline, see STATE.md).
+ *
+ * `sourceAddress` pays the fee and signs the envelope; `proposerAddress`
+ * (defaults to `sourceAddress`) is the on-chain `proposer` argument whose
+ * `require_auth()` must be satisfied. They differ only for the
+ * server-signed API route, where the server's own key can't satisfy a
+ * third party's auth — see `app/api/v1/anchor/route.ts`.
+ */
+export async function buildProposeDealTransaction(
+  sourceAddress: string,
+  hash: string,
+  signers: string[],
+  threshold: number,
+  proposerAddress: string = sourceAddress
+): Promise<Transaction> {
+  const account = await server.getAccount(sourceAddress);
+  const contract = new Contract(getContractId());
+
+  return new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      contract.call(
+        "propose_deal",
+        xdr.ScVal.scvBytes(Buffer.from(hash, "hex")),
+        Address.fromString(proposerAddress).toScVal(),
+        xdr.ScVal.scvVec(signers.map((s) => Address.fromString(s).toScVal())),
+        xdr.ScVal.scvU32(threshold)
+      )
+    )
+    .setTimeout(30)
+    .build();
+}
+
+/**
  * Simulates `tx` against the network and returns a new transaction with
  * the correct resource fee and footprint assembled in — required before a
  * Soroban invocation can be signed and submitted. If the invocation would
- * fail (e.g. the contract panics because this hash is already anchored),
- * this throws with that real simulation error message.
+ * fail (e.g. the contract panics because this deal already exists), this
+ * throws with that real simulation error message.
  */
-export async function prepareAnchorProofTransaction(
-  tx: Transaction
-): Promise<Transaction> {
+export async function prepareTransaction(tx: Transaction): Promise<Transaction> {
   return server.prepareTransaction(tx);
 }
 
@@ -166,16 +206,18 @@ export async function queryVerifyProof(
   };
 }
 
-// The release WASM build strips the contract's custom panic string
-// (`panic!("hash already anchored")` in contracts/src/lib.rs) for
-// binary size, so it never reaches the RPC diagnostic dump. Confirmed
+// The release WASM build strips the contract's custom panic strings
+// (`contracts/src/lib.rs`'s `panic!(...)` calls, in both `anchor_proof`
+// and the V2 `propose_deal`/`approve_deal`/`execute_deal` escrow) for
+// binary size, so they never reach the RPC diagnostic dump. Confirmed
 // live against Testnet: a real duplicate-hash call actually throws
 // `HostError: Error(WasmVm, InvalidAction)` with a diagnostic event
 // reading `"VM call trapped: UnreachableCodeReached"` — no trace of
-// the original message. `anchor_proof` is the contract's only panic
-// path (`verify_proof` never panics, and every other input is
-// validated client-side before submission), so this generic VM-trap
-// signature is, in practice, always the duplicate-hash case.
+// the original message. `verify_proof`/`get_deal` never panic on their
+// own (they're read-only), and every other input is validated
+// client-side before submission, so this generic VM-trap signature is,
+// in practice, always a contract-level rejection (duplicate hash,
+// re-proposed deal, etc.) rather than a malformed call.
 const DUPLICATE_HASH_SIGNATURE =
   /already\s*anchored|UnreachableCodeReached|VM call trapped|Error\(WasmVm,\s*InvalidAction\)/i;
 

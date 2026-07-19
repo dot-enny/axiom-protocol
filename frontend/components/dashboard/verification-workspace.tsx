@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { signTransaction } from "@stellar/freighter-api";
-import { Networks } from "@stellar/stellar-sdk";
+import { Networks, StrKey } from "@stellar/stellar-sdk";
 import { AnchorConfig } from "@/components/dashboard/anchor-config";
 import { Dropzone } from "@/components/dashboard/dropzone";
 import { TerminalConsole } from "@/components/dashboard/terminal-console";
@@ -11,9 +11,9 @@ import { WalletModal } from "@/components/WalletModal";
 import { useWallet } from "@/components/dashboard/wallet-context";
 import { sha256Hex } from "@/lib/hash";
 import {
-  buildAnchorProofTransaction,
+  buildProposeDealTransaction,
   confirmTransaction,
-  prepareAnchorProofTransaction,
+  prepareTransaction,
   submitSignedTransaction,
   translateContractError,
 } from "@/lib/soroban";
@@ -57,6 +57,11 @@ export function VerificationWorkspace() {
   const [threshold, setThreshold] = useState(1);
   const [assetValue, setAssetValue] = useState(0);
   const [isNonFinancial, setIsNonFinancial] = useState(false);
+  // One entry per counterparty beyond the connected wallet — always
+  // kept at exactly `threshold - 1` entries so the signers array sent
+  // on-chain (`[wallet, ...counterparties]`) has exactly `threshold`
+  // addresses.
+  const [counterparties, setCounterparties] = useState<string[]>([]);
   const {
     address,
     state: walletState,
@@ -92,6 +97,7 @@ export function VerificationWorkspace() {
     setThreshold(1);
     setAssetValue(0);
     setIsNonFinancial(false);
+    setCounterparties([]);
     setStatus("processing");
   }
 
@@ -106,19 +112,56 @@ export function VerificationWorkspace() {
     setThreshold(1);
     setAssetValue(0);
     setIsNonFinancial(false);
+    setCounterparties([]);
+  }
+
+  // Keeps `counterparties` at exactly `threshold - 1` entries whenever
+  // the threshold changes, preserving already-typed addresses for the
+  // entries that still fit.
+  function handleThresholdChange(value: number) {
+    setThreshold(value);
+    setCounterparties((prev) => {
+      const needed = Math.max(0, value - 1);
+      const next = prev.slice(0, needed);
+      while (next.length < needed) next.push("");
+      return next;
+    });
+  }
+
+  function handleCounterpartyChange(index: number, value: string) {
+    setCounterparties((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
   }
 
   const runAnchor = useCallback(
     async (issuerAddress: string, targetFile: VerifiedFile) => {
+      const trimmedCounterparties = counterparties.map((c) => c.trim());
+      if (
+        trimmedCounterparties.some(
+          (c) => !c || !StrKey.isValidEd25519PublicKey(c)
+        )
+      ) {
+        appendLine(
+          "[ERROR] Every counterparty address must be a valid Stellar public key before anchoring."
+        );
+        return;
+      }
+      const signers = [issuerAddress, ...trimmedCounterparties];
+
       setIsAnchoring(true);
 
       try {
-        appendLine("[NETWORK] Simulating transaction payload...");
-        const unsignedTx = await buildAnchorProofTransaction(
+        appendLine("[NETWORK] Simulating deal proposal payload...");
+        const unsignedTx = await buildProposeDealTransaction(
           issuerAddress,
-          targetFile.hash
+          targetFile.hash,
+          signers,
+          threshold
         );
-        const preparedTx = await prepareAnchorProofTransaction(unsignedTx);
+        const preparedTx = await prepareTransaction(unsignedTx);
 
         appendLine("[NETWORK] Requesting Freighter signature...");
         const signResult = await signTransaction(preparedTx.toXDR(), {
@@ -133,7 +176,7 @@ export function VerificationWorkspace() {
         const txHash = await submitSignedTransaction(signResult.signedTxXdr);
         await confirmTransaction(txHash);
 
-        appendLine("[SOROBAN] Anchor confirmed. Ledger state updated.");
+        appendLine("[SOROBAN] Deal proposed on-chain. Awaiting required approvals.");
         addRecord({
           filename: targetFile.name,
           hash: targetFile.hash,
@@ -155,7 +198,7 @@ export function VerificationWorkspace() {
         setIsAnchoring(false);
       }
     },
-    [appendLine, threshold, assetValue, isNonFinancial]
+    [appendLine, threshold, assetValue, isNonFinancial, counterparties]
   );
 
   function handleAnchorClick() {
@@ -202,11 +245,13 @@ export function VerificationWorkspace() {
           />
           <AnchorConfig
             threshold={threshold}
-            onThresholdChange={setThreshold}
+            onThresholdChange={handleThresholdChange}
             assetValue={assetValue}
             onAssetValueChange={setAssetValue}
             isNonFinancial={isNonFinancial}
             onNonFinancialChange={setIsNonFinancial}
+            counterparties={counterparties}
+            onCounterpartyChange={handleCounterpartyChange}
             disabled={isAnchoring || Boolean(anchorResult)}
           />
         </div>

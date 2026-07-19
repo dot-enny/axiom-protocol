@@ -85,16 +85,23 @@ export class AxiomClient {
   }
 
   /**
-   * Anchors a client-computed document hash on-chain, attributed to
-   * `issuerAddress`. Mirrors the same `anchor_proof` invocation the
-   * Axiom dashboard submits over Freighter, signed headlessly here by
-   * the API's own server key instead.
+   * Proposes an m-of-n multi-signature deal escrow for a client-computed
+   * document hash, attributed to `issuerAddress` as the proposer. Mirrors
+   * the same `propose_deal` invocation the Axiom dashboard submits over
+   * Freighter, signed headlessly here by the API's own server key
+   * instead.
+   *
+   * `signers` and `threshold` default to a 1-of-1 self-attestation
+   * (`signers: [issuerAddress]`, `threshold: 1`) so existing callers that
+   * only pass `hash`/`issuerAddress` keep working unchanged.
    *
    * @throws {AxiomAPIError} if the API responds with a 4xx/5xx status.
    */
   async anchorDocument(
     hash: string,
-    issuerAddress: string
+    issuerAddress: string,
+    signers: string[] = [issuerAddress],
+    threshold: number = 1
   ): Promise<AxiomReceipt> {
     const response = await fetch(`${this.baseUrl}/anchor`, {
       method: "POST",
@@ -102,7 +109,7 @@ export class AxiomClient {
         "Content-Type": "application/json",
         Authorization: `Bearer ${this.apiKey}`,
       },
-      body: JSON.stringify({ hash, issuer: issuerAddress }),
+      body: JSON.stringify({ hash, issuer: issuerAddress, signers, threshold }),
     });
 
     const body: unknown = await response.json().catch(() => undefined);

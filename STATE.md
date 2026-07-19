@@ -1891,21 +1891,129 @@ wasm32v1-none --release`) to confirm the panic-message wording change
 doesn't affect the production wasm's shape — still compiles clean,
 same 6,246-byte artifact as Session 32.
 
+**Session 34 — End-to-end V2 pipeline wiring: Frontend -> SDK -> API ->
+`propose_deal` (2026-07-19)**
+Connects the dashboard's "Anchor" flow, the headless SDK, and the
+server-signed API route all the way through to the V2 m-of-n escrow's
+`propose_deal` invocation — replacing every remaining call to the V1
+`anchor_proof` builder in the app. `anchor_proof`/`verify_proof`
+themselves are untouched in the contract; only the *callers* moved.
+
+- `sdk/src/index.ts` — `anchorDocument` gains `signers: string[]` and
+  `threshold: number`, both defaulting to a 1-of-1 self-attestation
+  (`[issuerAddress]`, `1`) so the existing `examples/node-test.ts`
+  2-argument call site keeps compiling and behaving identically
+  unchanged. Both are always sent in the POST body (defaults are filled
+  in before `fetch`, never omitted). Compiled clean (`npm run build`).
+- `frontend/app/api/v1/anchor/route.ts` — parses `signers`/`threshold`
+  from the request body via a new `isValidSignerList` type-guard
+  (non-empty array, every entry a valid Ed25519 Stellar address) plus a
+  `threshold` check (integer, `> 0`, `<= signers.length`); calls the new
+  `buildProposeDealTransaction` instead of `buildAnchorProofTransaction`.
+- `frontend/lib/soroban.ts` — added `buildProposeDealTransaction`,
+  constructing the exact XDR the brief specified:
+  `xdr.ScVal.scvBytes(Buffer.from(hash, "hex"))` for the `BytesN<32>`
+  hash argument (V1's `anchor_proof` took a plain `String`, so this is a
+  real encoding change, not just a new function name),
+  `Address.fromString(proposerAddress).toScVal()` for the proposer,
+  `xdr.ScVal.scvVec(signers.map(...))` for the signer pool, and
+  `xdr.ScVal.scvU32(threshold)`. `prepareAnchorProofTransaction` (always
+  generic — it only ever wrapped `server.prepareTransaction`) renamed to
+  `prepareTransaction` since it's no longer specific to one contract
+  call. Needed an explicit `buffer` npm dependency: `Buffer` isn't a
+  global in the browser bundle, and while `@stellar/stellar-sdk`
+  already pulls in the real `buffer` package transitively, importing it
+  directly here needed it promoted from a transitive to a direct
+  `frontend/package.json` dependency (`"buffer": "^6.0.3"`, the same
+  version stellar-sdk itself depends on) so module resolution doesn't
+  rely on npm's hoisting behavior.
+- `frontend/components/dashboard/verification-workspace.tsx` — new
+  `counterparties: string[]` state, always kept at exactly
+  `threshold - 1` entries by a new `handleThresholdChange` (replacing
+  the old bare `setThreshold` prop) that resizes the array — preserving
+  already-typed addresses for entries that still fit — whenever the
+  threshold input changes. `runAnchor` now trims and validates every
+  counterparty as a real Stellar public key before submitting (a clean
+  `[ERROR]` terminal line if not, no wasted network round-trip),
+  constructs `signers = [issuerAddress, ...counterparties]`, and calls
+  `buildProposeDealTransaction(issuerAddress, hash, signers, threshold)`
+  instead of the old `anchor_proof` builder. The one log line that
+  claimed more than what's actually true post-change —
+  `"[SOROBAN] Anchor confirmed. Ledger state updated."` — was reworded
+  to `"[SOROBAN] Deal proposed on-chain. Awaiting required approvals."`,
+  since a `propose_deal` call only creates a pending `DealState`; it
+  doesn't itself approve or execute (that's `approve_deal`/
+  `execute_deal`, still unwired — see "Not built yet"). The button
+  label, `anchorStatusLabel` copy, and receipt PDF flow were
+  deliberately left as-is; a full copy pass wasn't in this session's
+  scope and is tracked below instead of silently left half-consistent.
+- `frontend/components/dashboard/anchor-config.tsx` — when
+  `counterparties.length > 0`, renders one "Counterparty Address N"
+  text input per entry (below the existing fields, inside a
+  `border-t-2` divider), wired to a new `onCounterpartyChange(index,
+  value)` prop.
+
+Verified for real, in two layers:
+1. **UI-only, no wallet needed** (Playwright + system Chrome, headless):
+   confirmed 0 counterparty inputs at the default threshold 1; setting
+   threshold to 3 renders exactly 2, labeled "Counterparty Address 1"/
+   "2"; typing into both then dropping threshold to 2 leaves exactly 1
+   input and preserves the first typed value; dropping to 1 removes
+   both.
+2. **Real Testnet call**, via the same temporary "debug trigger,
+   verify, revert" pattern used in Session 31
+   (`window.__debugConnect`/`window.__debugSignerSecret` in
+   `wallet-context.tsx`/`verification-workspace.tsx`, fully reverted
+   afterward — confirmed zero diff on `wallet-context.tsx` and a clean
+   `grep` for both hook names): connected as the real funded account,
+   set threshold to 2 with one real (unfunded, just needs a valid
+   address shape) counterparty keypair, dropped a file, and clicked
+   Anchor. The built transaction reached the network and the **real
+   RPC response confirms the wiring is byte-for-byte correct** — it
+   reports `trying to invoke non-existent contract function,
+   propose_deal` against the *currently deployed* contract, with the
+   diagnostic event echoing back the exact arguments this session's
+   code sent: the correct hash bytes, the correct proposer
+   (`GC5VAGVVDESX3OMJB6WI4IQDDYCQPFXKGZYRAIBW66NZVXEH7G63NLBQ`), the
+   correct 2-entry signers vec (`[issuer, counterparty]`), and the
+   correct threshold (`2`). In other words: the RPC error is expected
+   and confirms correctness rather than indicating a bug — the deployed
+   `NEXT_PUBLIC_CONTRACT_ID` is still running the old V1-only WASM (see
+   "Not built yet"), so no live redeploy exists yet for `propose_deal`
+   to land on. Re-ran `tsc --noEmit` and `next build` after reverting
+   the debug hooks — both still pass clean.
+
 ## Not built yet
 
-- The anchor config panel's "Required Signatures" threshold (Session
-  31) is captured and persisted but still not enforced anywhere —
-  anchoring still goes through V1's single-issuer `anchor_proof`, not
-  the V2 `DealState` escrow (see the next bullet), so a 3-of-3
-  requirement today is purely cosmetic metadata.
+- **The V2 pipeline wired in Session 34 cannot complete a real round
+  trip yet**: the currently deployed `NEXT_PUBLIC_CONTRACT_ID`
+  (`CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK`) is still
+  the old two-function (`anchor_proof`/`verify_proof`) WASM from
+  Session 3 — it has never been redeployed with the V2 `DealState`
+  escrow functions compiled in Sessions 29/32/33. Every anchor
+  submitted through the dashboard, the API route, or the SDK will hit
+  the same `trying to invoke non-existent contract function` error
+  confirmed live this session, until a fresh `stellar contract deploy`
+  is run and `NEXT_PUBLIC_CONTRACT_ID` is updated — a separate,
+  consequential action (a new contract ID) intentionally not taken
+  without being explicitly asked for it.
+- Even once redeployed, `propose_deal` only *proposes* — this
+  pipeline never calls `approve_deal`/`execute_deal`, so every anchor
+  would land as a permanently-pending `DealState` (including the common
+  1-of-1 self-attestation case) unless a future session wires those in
+  too, most likely from the Deal Room. Until then, `verify_proof`'s
+  read side is also effectively orphaned: nothing writes new
+  `ComplianceRecord`s anymore now that the write path moved to
+  `propose_deal`'s separate, `BytesN<32>`-keyed `DataKey::Deal` storage,
+  so the Verify Portal (Feature 2) will only ever find hashes anchored
+  before this session, never new ones.
 - `contracts/src/lib.rs`'s V2 `DealState` m-of-n escrow functions
   (`propose_deal`/`approve_deal`/`execute_deal`/`get_deal`, reworked in
   Session 32 from Session 29's fixed three-role design, test suite
-  rewritten in Session 33) are compiled and unit-tested but not yet
-  deployed to Testnet — the currently deployed `NEXT_PUBLIC_CONTRACT_ID`
-  still only runs the old two-function WASM. The frontend's Deal Room
-  still uses local/mock signer state (Sessions 11/19), not this
-  on-chain escrow.
+  rewritten in Session 33, now called by the frontend/API/SDK as of
+  Session 34) are compiled and unit-tested but not yet deployed to
+  Testnet (see the bullet above). The frontend's Deal Room still uses
+  local/mock signer state (Sessions 11/19), not this on-chain escrow.
 - `@axiom/sdk` only wraps `anchorDocument` — no `verifyProof` read
   method yet, no test suite, no published npm package (it's a local
   scaffold only), and `mainnet`'s default base URL

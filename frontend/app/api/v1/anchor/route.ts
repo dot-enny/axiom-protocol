@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { Keypair, StrKey } from "@stellar/stellar-sdk";
 import {
-  buildAnchorProofTransaction,
+  buildProposeDealTransaction,
   confirmTransaction,
-  prepareAnchorProofTransaction,
+  prepareTransaction,
   submitSignedTransaction,
 } from "@/lib/soroban";
 
@@ -17,6 +17,14 @@ const HASH_PATTERN = /^[a-f0-9]{64}$/i;
 
 function errorResponse(status: number, message: string) {
   return NextResponse.json({ error: message }, { status });
+}
+
+function isValidSignerList(value: unknown): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every((s) => typeof s === "string" && StrKey.isValidEd25519PublicKey(s))
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -35,7 +43,12 @@ export async function POST(request: NextRequest) {
     return errorResponse(400, "Request body must be valid JSON.");
   }
 
-  const { hash, issuer } = (body ?? {}) as { hash?: unknown; issuer?: unknown };
+  const { hash, issuer, signers, threshold } = (body ?? {}) as {
+    hash?: unknown;
+    issuer?: unknown;
+    signers?: unknown;
+    threshold?: unknown;
+  };
 
   if (typeof hash !== "string" || !HASH_PATTERN.test(hash)) {
     return errorResponse(
@@ -45,6 +58,23 @@ export async function POST(request: NextRequest) {
   }
   if (typeof issuer !== "string" || !StrKey.isValidEd25519PublicKey(issuer)) {
     return errorResponse(400, "`issuer` must be a valid Stellar public address.");
+  }
+  if (!isValidSignerList(signers)) {
+    return errorResponse(
+      400,
+      "`signers` must be a non-empty array of valid Stellar public addresses."
+    );
+  }
+  if (
+    typeof threshold !== "number" ||
+    !Number.isInteger(threshold) ||
+    threshold <= 0 ||
+    threshold > signers.length
+  ) {
+    return errorResponse(
+      400,
+      "`threshold` must be an integer greater than 0 and no greater than `signers.length`."
+    );
   }
 
   const secretKey = process.env.SERVER_SECRET_KEY;
@@ -63,12 +93,14 @@ export async function POST(request: NextRequest) {
 
   let preparedTx;
   try {
-    const unsignedTx = await buildAnchorProofTransaction(
+    const unsignedTx = await buildProposeDealTransaction(
       serverKeypair.publicKey(),
       normalizedHash,
+      signers,
+      threshold,
       issuer
     );
-    preparedTx = await prepareAnchorProofTransaction(unsignedTx);
+    preparedTx = await prepareTransaction(unsignedTx);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown simulation error";
     return errorResponse(400, `Soroban simulation failed: ${message}`);
