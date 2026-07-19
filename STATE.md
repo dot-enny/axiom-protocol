@@ -1789,20 +1789,80 @@ column shows each record's real raw value with zero `NaN` anywhere
 hash-derived anymore. `tsc --noEmit` and a full `next build` both pass
 clean with zero errors/warnings.
 
+**Session 32 — V2 Rust Protocol rewrite: dynamic m-of-n multi-signature
+escrow (2026-07-19)**
+Replaces the Session 29 hardcoded three-role escrow (`issuer`/
+`auditor`/`counterparty` with fixed 2-of-2 approval) with a genuinely
+dynamic m-of-n design: an arbitrary pool of signers and a configurable
+threshold, so the on-chain contract can finally back the anchor config
+panel's "Required Signatures (1-3)" field from Session 31 instead of
+that field being purely cosmetic. `anchor_proof`/`verify_proof`/
+`ComplianceRecord` are untouched.
+
+- `DealState` (`#[contracttype]`) redefined: `signers: Vec<Address>`
+  (the full authorized pool), `approvals: Vec<Address>` (who has
+  actually signed so far), `threshold: u32` (minimum approvals
+  required), `executed_at: u64` (0 while pending). The old fixed
+  `issuer`/`auditor`/`counterparty`/`auditor_approved`/
+  `counterparty_approved` fields are gone — this is a breaking change
+  to the type, acceptable since the V2 escrow was never deployed to
+  Testnet (see "Not built yet").
+- `AxiomContract::propose_deal(env, hash, proposer, signers, threshold)`
+  — `proposer.require_auth()`, panics if `threshold == 0`, panics if
+  `threshold > signers.len()`, panics if a deal already exists for
+  `hash`; otherwise stores a fresh `DealState` with an empty
+  `approvals` vector.
+- `AxiomContract::approve_deal(env, hash, caller)` —
+  `caller.require_auth()`, panics if the deal doesn't exist, has
+  already executed, `caller` isn't in `signers` ("Signer is not a
+  party to this deal"), or `caller` already appears in `approvals`
+  ("Signer has already approved this deal" — Sybil protection, so one
+  address can't inflate the count by approving twice). Otherwise
+  pushes `caller` onto `approvals`.
+- `AxiomContract::execute_deal(env, hash, caller)` —
+  `caller.require_auth()`, panics if the deal doesn't exist, has
+  already executed, or `approvals.len() < threshold` ("Deal is missing
+  required approvals"); otherwise stamps `executed_at` with
+  `env.ledger().timestamp()`.
+- `AxiomContract::get_deal` unchanged in shape (still a panicking
+  read-only lookup), now returning the new `DealState` fields.
+- `contracts/src/test.rs` rewritten to match: `setup()` now generates a
+  `proposer` plus three generic signers (no more named
+  issuer/auditor/counterparty roles) and builds `Vec<Address>` pools
+  with `soroban_sdk::vec!`. Seven tests (up from four):
+  `test_successful_deal_execution` (2-of-3 pool, one approval isn't
+  enough, two is, then executes), `test_unauthorized_approval`,
+  `test_duplicate_approval` (new — the Sybil-protection panic),
+  `test_premature_execution`, `test_duplicate_proposal`,
+  `test_threshold_exceeds_signers` (new), `test_zero_threshold` (new).
+
+Verified for real: ran the exact build command from the brief first
+(`cargo build --target wasm32-unknown-unknown --release`) and confirmed
+it still fails outright on this machine's Rust 1.96 toolchain exactly
+as documented since Session 3/29, then built against the real target —
+`PATH="/c/msys64/ucrt64/bin:$PATH" cargo build --target wasm32v1-none
+--release` — which compiled clean with zero warnings, producing
+`target/wasm32v1-none/release/axiom_contract.wasm` (6,246 bytes). Then
+ran `cargo test` with the same `PATH` prefix: all 7 tests genuinely
+pass (`test result: ok. 7 passed; 0 failed`), zero warnings in the
+build log. Not deployed to Testnet — same reasoning as Session 29,
+redeploying (a new contract ID) is a separate, more consequential step
+than this session's brief asked for.
+
 ## Not built yet
 
 - The anchor config panel's "Required Signatures" threshold (Session
-  31) is captured and persisted but not enforced anywhere — anchoring
-  still goes through V1's single-issuer `anchor_proof`, not the V2
-  `DealState` escrow (see the next bullet), so a 3-of-3 requirement
-  today is purely cosmetic metadata.
-- `contracts/src/lib.rs`'s new `DealState` escrow functions
-  (`propose_deal`/`approve_deal`/`execute_deal`/`get_deal`) are
-  compiled, unit-tested, and interface-verified but not yet deployed
-  to Testnet — the currently deployed `NEXT_PUBLIC_CONTRACT_ID` still
-  only runs the old two-function WASM. The frontend's Deal Room still
-  uses local/mock signer state (Sessions 11/19), not this on-chain
-  escrow.
+  31) is captured and persisted but still not enforced anywhere —
+  anchoring still goes through V1's single-issuer `anchor_proof`, not
+  the V2 `DealState` escrow (see the next bullet), so a 3-of-3
+  requirement today is purely cosmetic metadata.
+- `contracts/src/lib.rs`'s V2 `DealState` m-of-n escrow functions
+  (`propose_deal`/`approve_deal`/`execute_deal`/`get_deal`, reworked in
+  Session 32 from Session 29's fixed three-role design) are compiled
+  and unit-tested but not yet deployed to Testnet — the currently
+  deployed `NEXT_PUBLIC_CONTRACT_ID` still only runs the old
+  two-function WASM. The frontend's Deal Room still uses local/mock
+  signer state (Sessions 11/19), not this on-chain escrow.
 - `@axiom/sdk` only wraps `anchorDocument` — no `verifyProof` read
   method yet, no test suite, no published npm package (it's a local
   scaffold only), and `mainnet`'s default base URL
