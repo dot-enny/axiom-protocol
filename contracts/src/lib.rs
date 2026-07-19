@@ -7,7 +7,7 @@
 //! hash that has already been anchored can be verified but never
 //! silently overwritten.
 
-use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env, String};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, BytesN, Env, String, Vec};
 
 #[cfg(test)]
 mod test;
@@ -35,18 +35,20 @@ pub struct ComplianceRecord {
     pub issuer: Address,
 }
 
-/// The on-chain state of a multi-party deal escrow: an issuer's
-/// proposal that both an auditor and a counterparty must
-/// independently approve before it can execute.
+/// The on-chain state of a dynamic m-of-n deal escrow: a pool of
+/// authorized `signers`, the subset who have actually `approved` so
+/// far, and the `threshold` of approvals required before it can
+/// execute.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DealState {
-    pub issuer: Address,
-    pub auditor: Address,
-    pub counterparty: Address,
-    pub auditor_approved: bool,
-    pub counterparty_approved: bool,
-    /// 0 while pending; set to the ledger timestamp once both
+    /// The total pool of addresses authorized to approve this deal.
+    pub signers: Vec<Address>,
+    /// The subset of `signers` who have approved so far.
+    pub approvals: Vec<Address>,
+    /// The minimum number of approvals required to execute.
+    pub threshold: u32,
+    /// 0 while pending; set to the ledger timestamp once `threshold`
     /// approvals are in and `execute_deal` has run.
     pub executed_at: u64,
 }
@@ -94,21 +96,29 @@ impl AxiomContract {
         env.storage().persistent().get(&hash)
     }
 
-    /// Proposes a new multi-party deal escrow for `hash`, naming the
-    /// auditor and counterparty who must both approve before
-    /// `execute_deal` can run.
+    /// Proposes a new m-of-n deal escrow for `hash`, naming the pool
+    /// of `signers` authorized to approve it and the `threshold`
+    /// number of approvals required before `execute_deal` can run.
     ///
-    /// Requires `issuer`'s authorization. Panics if a deal already
-    /// exists for `hash`, since a proposal must not silently overwrite
-    /// an existing one's approval state.
+    /// Requires `proposer`'s authorization. Panics if `threshold` is
+    /// zero, if `threshold` exceeds the number of `signers`, or if a
+    /// deal already exists for `hash` — a proposal must never
+    /// silently overwrite an existing one's approval state.
     pub fn propose_deal(
         env: Env,
         hash: BytesN<32>,
-        issuer: Address,
-        auditor: Address,
-        counterparty: Address,
+        proposer: Address,
+        signers: Vec<Address>,
+        threshold: u32,
     ) {
-        issuer.require_auth();
+        proposer.require_auth();
+
+        if threshold == 0 {
+            panic!("Threshold must be greater than zero");
+        }
+        if threshold > signers.len() {
+            panic!("Threshold cannot exceed the number of signers");
+        }
 
         let key = DataKey::Deal(hash);
         if env.storage().persistent().has(&key) {
@@ -116,11 +126,9 @@ impl AxiomContract {
         }
 
         let state = DealState {
-            issuer,
-            auditor,
-            counterparty,
-            auditor_approved: false,
-            counterparty_approved: false,
+            signers,
+            approvals: Vec::new(&env),
+            threshold,
             executed_at: 0,
         };
         env.storage().persistent().set(&key, &state);
@@ -129,13 +137,15 @@ impl AxiomContract {
             .extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
-    /// Records `signer`'s approval of the deal for `hash`. `signer`
-    /// must be either the deal's auditor or counterparty.
+    /// Records `caller`'s approval of the deal for `hash`. `caller`
+    /// must be one of the deal's authorized `signers`.
     ///
-    /// Requires `signer`'s authorization. Panics if the deal doesn't
-    /// exist, has already executed, or `signer` isn't a party to it.
-    pub fn approve_deal(env: Env, hash: BytesN<32>, signer: Address) {
-        signer.require_auth();
+    /// Requires `caller`'s authorization. Panics if the deal doesn't
+    /// exist, has already executed, `caller` isn't an authorized
+    /// signer, or `caller` has already approved (Sybil protection —
+    /// one address can't count as two approvals).
+    pub fn approve_deal(env: Env, hash: BytesN<32>, caller: Address) {
+        caller.require_auth();
 
         let key = DataKey::Deal(hash);
         let mut state: DealState = env.storage().persistent().get(&key).expect("Deal does not exist");
@@ -143,35 +153,38 @@ impl AxiomContract {
         if state.executed_at != 0 {
             panic!("Deal already executed");
         }
-
-        if signer == state.auditor {
-            state.auditor_approved = true;
-        } else if signer == state.counterparty {
-            state.counterparty_approved = true;
-        } else {
+        if !state.signers.contains(&caller) {
             panic!("Signer is not a party to this deal");
         }
+        if state.approvals.contains(&caller) {
+            panic!("Signer has already approved this deal");
+        }
 
+        state.approvals.push_back(caller);
         env.storage().persistent().set(&key, &state);
         env.storage()
             .persistent()
             .extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
     }
 
-    /// Executes the deal for `hash` once both the auditor and
-    /// counterparty have approved, stamping `executed_at` with the
-    /// current ledger timestamp.
+    /// Executes the deal for `hash` once at least `threshold`
+    /// approvals are in, stamping `executed_at` with the current
+    /// ledger timestamp.
     ///
     /// Requires `caller`'s authorization. Panics if the deal doesn't
-    /// exist or either approval is still outstanding.
+    /// exist, has already executed, or the approval count is still
+    /// below `threshold`.
     pub fn execute_deal(env: Env, hash: BytesN<32>, caller: Address) {
         caller.require_auth();
 
         let key = DataKey::Deal(hash);
         let mut state: DealState = env.storage().persistent().get(&key).expect("Deal does not exist");
 
-        if !state.auditor_approved || !state.counterparty_approved {
-            panic!("Deal is missing a required approval");
+        if state.executed_at != 0 {
+            panic!("Deal already executed");
+        }
+        if state.approvals.len() < state.threshold {
+            panic!("Deal is missing required approvals");
         }
 
         state.executed_at = env.ledger().timestamp();
