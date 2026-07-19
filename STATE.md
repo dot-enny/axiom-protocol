@@ -1674,16 +1674,62 @@ added — the brief's Task 3 asked specifically for a clean compile plus
 this update, not a redeploy (which would be a separate, more
 consequential action — a new contract ID — better done as its own
 explicit step) or a test suite (a pre-existing "Not built yet" gap,
-still open).
+closed the same day — see Session 30 below).
+
+**Session 30 — Deterministic test suite for the V2 escrow contract (2026-07-19)**
+`contracts/src/test.rs` exercises the full async 3-party deal lifecycle
+natively (no Testnet, no wasm — soroban-sdk's test host runs contract
+code in-process), closing the "no contract unit tests yet" gap this
+file has tracked since Session 3.
+
+- `contracts/Cargo.toml` — added `[dev-dependencies] soroban-sdk =
+  { version = "26", features = ["testutils"] }`. `testutils` is a real
+  named feature (`Env::register`, `Address::generate`,
+  `env.mock_all_auths()`, `testutils::Ledger::set_timestamp` all live
+  behind it) that isn't enabled by the plain `[dependencies]` entry —
+  confirmed by reading the SDK's own `Cargo.toml` rather than assuming,
+  and scoped to dev-dependencies only so the production wasm build
+  never links the extra `ed25519-dalek`/`arbitrary`/crypto-curve
+  dependency tree it pulls in.
+- `contracts/src/lib.rs` — added `#[cfg(test)] mod test;`.
+- `contracts/src/test.rs` — a `setup()` helper registers a fresh
+  contract, calls `env.mock_all_auths()` (these tests are about the
+  contract's own party/state logic, not Soroban's signature
+  verification), and generates three mock `Address`es plus a mock
+  `BytesN<32>` hash (`[1u8; 32]`). Four tests:
+  - `test_successful_deal_execution` — proposes, asserts
+    `executed_at == 0` and both approval flags `false`; approves as
+    auditor, asserts only `auditor_approved` flips; approves as
+    counterparty, asserts both flags `true`; sets a known ledger
+    timestamp and executes, asserts `executed_at > 0`.
+  - `test_unauthorized_approval` — a 4th, uninvolved address calling
+    `approve_deal` panics with "Signer is not a party to this deal".
+  - `test_premature_execution` — `execute_deal` with only the
+    auditor's approval in panics with "Deal is missing a required
+    approval".
+  - `test_duplicate_proposal` — proposing the same hash twice panics
+    with "Deal already exists".
+
+Verified for real, not just written: `cargo test` (same `wasm32v1-none`
+Rust 1.96 toolchain, same `PATH="/c/msys64/ucrt64/bin:$PATH"` linker
+workaround from Session 29 — the fresh `testutils`-only dependency
+tree, notably `curve25519-dalek`/`ed25519-dalek`/`soroban-env-host`,
+had never been compiled before and hit the same host-linking quirk on
+first build) — all 4 tests genuinely pass
+(`test result: ok. 4 passed; 0 failed`), confirmed zero warnings
+anywhere in the full build log, and re-ran the release `wasm32v1-none`
+build afterward to confirm the `dev-dependencies`/`mod test` additions
+don't affect the production contract build (still compiles clean).
 
 ## Not built yet
 
 - `contracts/src/lib.rs`'s new `DealState` escrow functions
   (`propose_deal`/`approve_deal`/`execute_deal`/`get_deal`) are
-  compiled and interface-verified but not yet deployed to Testnet —
-  the currently deployed `NEXT_PUBLIC_CONTRACT_ID` still only runs the
-  old two-function WASM. The frontend's Deal Room still uses local/
-  mock signer state (Sessions 11/19), not this on-chain escrow.
+  compiled, unit-tested, and interface-verified but not yet deployed
+  to Testnet — the currently deployed `NEXT_PUBLIC_CONTRACT_ID` still
+  only runs the old two-function WASM. The frontend's Deal Room still
+  uses local/mock signer state (Sessions 11/19), not this on-chain
+  escrow.
 - `@axiom/sdk` only wraps `anchorDocument` — no `verifyProof` read
   method yet, no test suite, no published npm package (it's a local
   scaffold only), and `mainnet`'s default base URL
@@ -1693,7 +1739,8 @@ still open).
   Bearer check only validates a token *shape* (`ax_live_` prefix), not
   a real issued/revocable API key, and there's no persistence of which
   key anchored what. Fine for this stage, not production-ready.
-- No contract unit tests yet.
+- Contract unit tests only cover the V2 deal escrow functions
+  (Session 30) — `anchor_proof`/`verify_proof` (V1) still have none.
 - Not tested against a real Freighter installation or a real browser
   signature popup (this machine doesn't have the extension) — the
   underlying sign/submit/confirm pipeline was verified for real
