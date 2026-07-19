@@ -1983,37 +1983,174 @@ Verified for real, in two layers:
    to land on. Re-ran `tsc --noEmit` and `next build` after reverting
    the debug hooks — both still pass clean.
 
+**Session 35 — Patching the V2 state fractures: Verify Portal reads
+`DealState`, deals can now execute (2026-07-19)**
+Two gaps flagged at the end of Session 34 — the Verify Portal only
+understanding the old flat `ComplianceRecord`, and nothing in the
+pipeline ever calling `approve_deal`/`execute_deal` — are both closed
+in code (still blocked on the same contract redeploy noted below).
+
+- **The Read Gap** — `frontend/lib/soroban.ts` gained
+  `queryDealState(hash)`, invoking `get_deal` (via `xdr.ScVal.scvBytes`,
+  matching `BytesN<32>`) instead of the old `verify_proof`/
+  `ComplianceRecord` path, returning `{ signers, approvals, threshold,
+  executedAt }`. Unlike `verify_proof`, `get_deal` panics
+  (`.expect("Deal does not exist")`) on an unproposed hash instead of
+  returning `None` — confirmed this collapses to the same generic
+  release-WASM VM-trap signature already tracked by
+  `DUPLICATE_HASH_SIGNATURE`, so `queryDealState` treats a match against
+  that regex as "not found" (`null`) and anything else as a real thrown
+  error. The adjacent comment block (previously claiming "`verify_proof`/
+  `get_deal` never panic on their own") was wrong about `get_deal` and
+  is corrected. Also added `buildApproveDealTransaction`/
+  `buildExecuteDealTransaction`, mirroring `buildProposeDealTransaction`'s
+  `sourceAddress`/`callerAddress` split.
+- **The Execution Gap, part 1 (auto-execute 1-of-1)** —
+  `frontend/app/api/v1/anchor/route.ts`: once `propose_deal` is
+  confirmed, if `threshold === 1 && signers.length === 1` it now
+  chases that with a server-signed `approve_deal` then `execute_deal`
+  for that same sole signer, so single-party attestation still settles
+  in one call. Wrapped in its own try/catch so a failure there (e.g.
+  the contract not actually having these functions yet) is reported
+  as `autoExecuted: false` / `autoExecuteError` alongside the
+  already-successful proposal, rather than turning a genuine partial
+  success into an overall 500. Response `status` is now `"executed"`
+  or `"confirmed"` depending on which happened.
+- **The Execution Gap, part 2 (multiplayer approve)** — new route
+  `frontend/app/api/v1/approve/route.ts`: `POST { hash, signerAddress }`
+  → server-signed `approve_deal`, then a real `queryDealState` re-check
+  — if `approvals.length >= threshold` and not yet executed, immediately
+  chases with `execute_deal` too. An execution failure after a
+  successful approval still returns 200 (`executed: false`,
+  `executeError`) for the same "don't overwrite a partial success"
+  reason as above.
+- **Verify Portal UI** — `frontend/components/verify/verify-panel.tsx`
+  rewritten around `DealState` instead of `ComplianceRecord`:
+  `executedAt > 0` renders a `[ VERIFIED & EXECUTED ]` panel (signer
+  list + execution timestamp + the existing `AuditTrail`);
+  `executedAt === 0` renders `[ PENDING ESCROW: N / M SIGNATURES ]`
+  with each signer checked off against `approvals`, plus a heavy
+  `[ APPROVE DEAL ]` button (full-width, `Button`'s `primary` variant)
+  that grabs `address` from `useWallet()` if connected (the `(platform)`
+  layout already wraps `/verify` in `WalletProvider`) or falls back to
+  `window.prompt(...)`, then `POST`s `/api/v1/approve` and re-queries on
+  success. The local-ledger fallback (`findLocalRecord`, used when the
+  live chain read itself fails) now returns a `DealState`-shaped
+  approximation — `signers: [issuer]`, `approvals: []`,
+  `executedAt: 0` — since the local store was never asked to track
+  approvals/execution, so it can only ever degrade to "pending, no
+  approvals recorded," never to "executed."
+  - **Design-system deviation, flagged rather than silently
+    substituted**: the brief asked for literal "stark green"/"yellow"
+    status colors, which conflicts directly with `.clauderules`'
+    "Absolute Monochrome" rule (no color tokens anywhere, enforced
+    deliberately since Session 22's dedicated purge of non-monochrome
+    styling). Implemented the same semantic distinction — confirmed/
+    executed vs. pending/at-risk — using the existing monochrome
+    vocabulary instead: solid inverted `bg-black` for the executed
+    state (matching the prior "found" treatment), a heavier
+    `border-4` white panel for the pending state. No color classes
+    were added. Flagging this explicitly in case an actual color
+    exception is wanted here — trivial to swap in if so.
+
+Verified for real (Playwright + system Chrome, dev server): (1)
+seeded a local ledger record and confirmed the live `get_deal` call
+fails as expected (contract not yet redeployed — see below), falls
+back to `findLocalRecord`, and renders `[ PENDING ESCROW: 0 / 2
+SIGNATURES ]` with an unchecked signer row; (2) clicked `[ APPROVE
+DEAL ]`, supplied an address via the `window.prompt` dialog, and
+confirmed the request reached the real `/api/v1/approve` route, which
+built and simulated a real `approve_deal` transaction — the RPC
+diagnostic event echoes back the correct hash bytes and signer
+address, failing only with the same "non-existent contract function"
+error as Session 34 (expected, not a wiring bug); (3) re-confirmed the
+"rejected" path (unknown hash, no local record) still renders
+correctly. `tsc --noEmit` and `next build` both pass clean (new
+`/api/v1/approve` route registered).
+
+**Session 36 — V2 contract redeployed to Testnet: the pipeline is
+finally live end-to-end (2026-07-19)**
+Every prior V2 session (29, 32, 33, 34, 35) had been blocked on the
+same fact: the deployed `NEXT_PUBLIC_CONTRACT_ID` was still the
+Session 3 two-function WASM, so nothing calling `propose_deal`/
+`approve_deal`/`execute_deal`/`get_deal` could ever complete against
+real Testnet. This session closes that gap.
+
+- Rebuilt the release wasm fresh (`PATH="/c/msys64/ucrt64/bin:$PATH"
+  cargo build --target wasm32v1-none --release`, the same documented
+  toolchain workaround from every prior contract session) and deployed
+  it with `stellar contract deploy` using the `admin` CLI identity —
+  which resolves to the same funded account
+  (`GC5VAGVVDESX3OMJB6WI4IQDDYCQPFXKGZYRAIBW66NZVXEH7G63NLBQ`) already
+  used everywhere else as `SERVER_SECRET_KEY`, so the pre-existing
+  "server key can't satisfy third-party auth" constraint continues to
+  apply consistently rather than becoming a different problem.
+  New contract ID: **`CAH3EF2GDWWJTO24RRFUAPA4RB7DGJD36OSZSWKHBDFS3LHHYIERYO6X`**
+  (old one, `CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK`,
+  is now permanently retired — its `ComplianceRecord`/`anchor_proof`
+  history stays queryable there, but nothing points a new call at it
+  anymore). `stellar contract info interface` against the live
+  deployment confirms all 6 functions exported with the right
+  signatures.
+- Updated `frontend/.env.local`'s `NEXT_PUBLIC_CONTRACT_ID` to the new
+  ID. Also found and fixed two *other* hardcoded copies of the old ID
+  that a redeploy would otherwise have silently stranded:
+  `sidebar-nav.tsx`'s "Ledger Explorer" link and `audit-trail.tsx`'s
+  displayed "Contract ID" — both were `const CONTRACT_ID = "CCO6..."`
+  literals instead of reading `process.env.NEXT_PUBLIC_CONTRACT_ID`,
+  so they'd have kept linking to/displaying the retired contract even
+  though everything else moved. Switched both to read the env var, so
+  this doesn't recur on the next redeploy. Also updated the static
+  illustrative example in `developers/api-docs.tsx`'s docs snippet to
+  the new ID for consistency (purely cosmetic, not a live pointer).
+  Deliberately left the SDK README's frozen example receipt JSON
+  alone — that's a captured historical artifact from a real Session 28
+  run, not a live reference, and rewriting it would misrepresent what
+  was actually captured then.
+
+**Verified for real against the live contract** (no more local-ledger
+fallback needed — every read below is a genuine `get_deal` simulation
+against `CAH3EF2G...`):
+1. `POST /api/v1/anchor` with a fresh random hash, `signers: [funded
+   account]`, `threshold: 1` → `propose_deal` → auto `approve_deal` →
+   auto `execute_deal`, all three real transactions confirmed,
+   response `status: "executed"`, `autoExecuted: true`.
+2. `POST /api/v1/anchor` with a second hash, a 3-address signer pool,
+   `threshold: 2` → proposed only (`autoExecuted: false`), then `POST
+   /api/v1/approve` for the funded account (one of the three real
+   signers) → real `approve_deal` confirmed, `executed: false` (1 of 2
+   — correctly not enough yet).
+3. The Verify Portal, hit live for both hashes: the first renders
+   `[ VERIFIED & EXECUTED ]` with the real signer and a real execution
+   timestamp; the second renders `[ PENDING ESCROW: 1 / 2 SIGNATURES ]`
+   with the funded account's row checked `[X]` and the other two
+   signers unchecked `[ ]` — exactly matching the real on-chain
+   `DealState`.
+
 ## Not built yet
 
-- **The V2 pipeline wired in Session 34 cannot complete a real round
-  trip yet**: the currently deployed `NEXT_PUBLIC_CONTRACT_ID`
-  (`CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK`) is still
-  the old two-function (`anchor_proof`/`verify_proof`) WASM from
-  Session 3 — it has never been redeployed with the V2 `DealState`
-  escrow functions compiled in Sessions 29/32/33. Every anchor
-  submitted through the dashboard, the API route, or the SDK will hit
-  the same `trying to invoke non-existent contract function` error
-  confirmed live this session, until a fresh `stellar contract deploy`
-  is run and `NEXT_PUBLIC_CONTRACT_ID` is updated — a separate,
-  consequential action (a new contract ID) intentionally not taken
-  without being explicitly asked for it.
-- Even once redeployed, `propose_deal` only *proposes* — this
-  pipeline never calls `approve_deal`/`execute_deal`, so every anchor
-  would land as a permanently-pending `DealState` (including the common
-  1-of-1 self-attestation case) unless a future session wires those in
-  too, most likely from the Deal Room. Until then, `verify_proof`'s
-  read side is also effectively orphaned: nothing writes new
-  `ComplianceRecord`s anymore now that the write path moved to
-  `propose_deal`'s separate, `BytesN<32>`-keyed `DataKey::Deal` storage,
-  so the Verify Portal (Feature 2) will only ever find hashes anchored
-  before this session, never new ones.
-- `contracts/src/lib.rs`'s V2 `DealState` m-of-n escrow functions
-  (`propose_deal`/`approve_deal`/`execute_deal`/`get_deal`, reworked in
-  Session 32 from Session 29's fixed three-role design, test suite
-  rewritten in Session 33, now called by the frontend/API/SDK as of
-  Session 34) are compiled and unit-tested but not yet deployed to
-  Testnet (see the bullet above). The frontend's Deal Room still uses
-  local/mock signer state (Sessions 11/19), not this on-chain escrow.
+- The auto-execute/approve-route auth caveat from Sessions 34/35 still
+  applies even against the live contract: the server-signed routes
+  only satisfy `require_auth()` for an address that happens to equal
+  `SERVER_SECRET_KEY`'s own public key. Session 36's Test 2 above
+  proved partial approval (1 of 2) genuinely works on-chain, but
+  getting that specific deal to full execution would need the *other*
+  two signers' own private keys to sign their own `approve_deal`
+  calls — a real multi-party signing flow (e.g. each party visiting
+  the Verify Portal with their own connected Freighter wallet) rather
+  than the server acting on their behalf, which was never wired in on
+  either the V1 or V2 server routes.
+- `verify_proof`/`ComplianceRecord` is now fully legacy: the retired
+  contract (`CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK`)
+  still holds whatever was anchored there before Session 34, but
+  nothing in the app points at it anymore, and the live contract never
+  had `anchor_proof` called against it. `get_deal`/`queryDealState` is
+  the only live read path now.
+- The frontend's Deal Room still uses local/mock signer state
+  (Sessions 11/19), not this on-chain escrow — a real multi-party UI
+  flow (each party connecting their own wallet to call `approve_deal`
+  directly, rather than only through the server-signed `/api/v1/approve`
+  route) would most naturally live there.
 - `@axiom/sdk` only wraps `anchorDocument` — no `verifyProof` read
   method yet, no test suite, no published npm package (it's a local
   scaffold only), and `mainnet`'s default base URL
