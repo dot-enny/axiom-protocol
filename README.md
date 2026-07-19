@@ -37,6 +37,15 @@ Written in Rust (`#![no_std]`) and compiled to WebAssembly for the Soroban VM.
 * **State Protection:** Contracts trap and revert on duplicate hash injections to preserve the immutability of the original timestamp.
 * **Cryptographic Audit Trail:** On-chain mapping of Asset Hash -> Issuer Address + Network Timestamp.
 
+### Dynamic Escrow & Valuation
+
+Axiom's anchor configuration adapts to the shape of the underlying agreement, from a single self-attesting party to a fully independent three-party escrow — and keeps financial and non-financial proofs strictly separated so protocol-wide value metrics stay meaningful.
+
+* **Self-Attestation (1-Party):** Immediate cryptographic timestamping for proprietary algorithms and IP.
+* **Bilateral Agreements (2-Party):** Zero-knowledge, mathematically undeniable vesting and scope-of-work contracts.
+* **Institutional Escrow (3-Party):** Trustless execution for High-Value RWAs requiring independent auditor verification.
+* **Dynamic TVL:** Strict separation of financial assets (e.g., T-Bills) and non-financial compliance proofs (e.g., KYC policies) to maintain protocol metric integrity.
+
 ---
 
 ## Quick Start (Local Development)
