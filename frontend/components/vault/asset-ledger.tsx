@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useLedgerStore } from "@/lib/useLedgerStore";
-import { calculateAssetValue, formatUsd } from "@/lib/format";
+import { formatUsd } from "@/lib/format";
 
 // No real token ID exists per anchor yet, so it's deterministically
 // derived from the real hash — same hash always produces the same
@@ -48,7 +48,7 @@ export function AssetLedger() {
               <tr key={record.id}>
                 <td className="px-6 py-4 md:px-10">{record.filename}</td>
                 <td className="px-6 py-4">{deriveTokenId(record.hash)}</td>
-                <td className="px-6 py-4">{formatUsd(calculateAssetValue(record.hash))}</td>
+                <td className="px-6 py-4">{formatUsd(record.value ?? 0)}</td>
                 <td className="px-6 py-4">
                   <Link
                     href={{ pathname: "/verify", query: { hash: record.hash } }}

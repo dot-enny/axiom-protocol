@@ -1,13 +1,16 @@
 "use client";
 
 import { useLedgerStore } from "@/lib/useLedgerStore";
-import { calculateAssetValue, formatUsd } from "@/lib/format";
+import { formatUsd } from "@/lib/format";
 
 export function ProtocolMetrics() {
   const records = useLedgerStore();
 
+  // `?? 0` guards records anchored before `value` existed in the
+  // stored schema (see useLedgerStore.ts) — those predate this field
+  // and would otherwise sum to NaN.
   const totalValueAnchored = records.reduce(
-    (sum, record) => sum + calculateAssetValue(record.hash),
+    (sum, record) => sum + (record.value ?? 0),
     0
   );
 
