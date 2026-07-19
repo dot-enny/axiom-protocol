@@ -32,10 +32,10 @@ Built with **Next.js 14** (App Router), **TypeScript**, **Tailwind CSS** and str
 
 ### 2. The Smart Contract (`/contracts`)
 Written in Rust (`#![no_std]`) and compiled to WebAssembly for the Soroban VM.
-* **Immutable Escrow:** Stores the SHA-256 hash alongside the issuer's signature and a network timestamp in Soroban Persistent Storage.
+* **Dynamic m-of-n Escrow:** Stores the SHA-256 hash alongside a dynamic vector of authorized signers and a required execution threshold.
 * **Deterministic Execution:** Lightweight and highly optimized to minimize network rent and execution costs.
 * **State Protection:** Contracts trap and revert on duplicate hash injections to preserve the immutability of the original timestamp.
-* **Cryptographic Audit Trail:** On-chain mapping of Asset Hash -> Issuer Address + Network Timestamp.
+* **Cryptographic Audit Trail:** On-chain mapping of Asset Hash -> Signer Matrix + Network Timestamp.
 
 ### Dynamic Escrow & Valuation
 
@@ -72,7 +72,7 @@ cd frontend
 npm install
 npm run dev
 ```
-Create a .env.local file in the frontend directory:
+Create a `.env.local` file in the frontend directory:
 ```
 NEXT_PUBLIC_CONTRACT_ID=YOUR_CONTRACT_ID
 SERVER_SECRET_KEY=YOUR_ADMIN_SECRET_KEY
@@ -119,9 +119,11 @@ function dummyDocumentHash(): string {
   });
 
   try {
+    // V2 Execution: Hash, Signers Array, Threshold
     const receipt = await client.anchorDocument(
       dummyDocumentHash(),
-      DUMMY_ISSUER
+      [DUMMY_ISSUER], 
+      1               
     );
     console.log("[SOROBAN] Anchor confirmed. Receipt:");
     console.log(JSON.stringify(receipt, null, 2));
