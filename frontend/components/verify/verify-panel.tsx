@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
-import { signTransaction } from "@stellar/freighter-api";
-import { Networks, type Transaction } from "@stellar/stellar-sdk";
 import { Button } from "@/components/ui/button";
 import { WalletModal } from "@/components/WalletModal";
 import { AuditTrail } from "@/components/verify/audit-trail";
@@ -12,10 +10,8 @@ import { useWallet } from "@/components/dashboard/wallet-context";
 import {
   buildApproveDealTransaction,
   buildExecuteDealTransaction,
-  confirmTransaction,
-  prepareTransaction,
   queryDealState,
-  submitSignedTransaction,
+  signAndSubmit,
   translateContractError,
   type DealState,
 } from "@/lib/soroban";
@@ -39,24 +35,6 @@ function findLocalRecord(hash: string): DealState | null {
     threshold: local.threshold,
     executedAt: 0,
   };
-}
-
-/** Signs `unsignedTx` via Freighter, submits it, and waits for confirmation. */
-async function signAndSubmit(
-  unsignedTx: Transaction,
-  signerAddress: string
-): Promise<string> {
-  const preparedTx = await prepareTransaction(unsignedTx);
-  const signResult = await signTransaction(preparedTx.toXDR(), {
-    networkPassphrase: Networks.TESTNET,
-    address: signerAddress,
-  });
-  if (signResult.error) {
-    throw new Error(signResult.error.message);
-  }
-  const txHash = await submitSignedTransaction(signResult.signedTxXdr);
-  await confirmTransaction(txHash);
-  return txHash;
 }
 
 export function VerifyPanel() {

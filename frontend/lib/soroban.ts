@@ -1,4 +1,5 @@
 import { Buffer } from "buffer";
+import { signTransaction } from "@stellar/freighter-api";
 import {
   Account,
   Address,
@@ -235,6 +236,32 @@ export async function confirmTransaction(hash: string): Promise<void> {
   }
 
   throw new Error(describeTransactionResult(result.resultXdr));
+}
+
+/**
+ * Signs `unsignedTx` via the caller's connected Freighter wallet, submits
+ * it, and waits for confirmation — the single shared choke point for
+ * every client-signed contract call in this app (dashboard solo anchors,
+ * the Verify Portal's approve flow, and the Deal Room). `signerAddress`
+ * must be the same address passed as the on-chain `caller`/`proposer`
+ * argument to whichever `build*Transaction` produced `unsignedTx` —
+ * Freighter can only sign for its own connected account.
+ */
+export async function signAndSubmit(
+  unsignedTx: Transaction,
+  signerAddress: string
+): Promise<string> {
+  const preparedTx = await prepareTransaction(unsignedTx);
+  const signResult = await signTransaction(preparedTx.toXDR(), {
+    networkPassphrase: NETWORK_PASSPHRASE,
+    address: signerAddress,
+  });
+  if (signResult.error) {
+    throw new Error(signResult.error.message);
+  }
+  const txHash = await submitSignedTransaction(signResult.signedTxXdr);
+  await confirmTransaction(txHash);
+  return txHash;
 }
 
 /**

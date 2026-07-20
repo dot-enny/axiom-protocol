@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { signTransaction } from "@stellar/freighter-api";
-import { Networks, StrKey, type Transaction } from "@stellar/stellar-sdk";
+import { StrKey } from "@stellar/stellar-sdk";
 import { AnchorConfig } from "@/components/dashboard/anchor-config";
 import { Dropzone } from "@/components/dashboard/dropzone";
 import { TerminalConsole } from "@/components/dashboard/terminal-console";
@@ -14,9 +13,7 @@ import {
   buildApproveDealTransaction,
   buildExecuteDealTransaction,
   buildProposeDealTransaction,
-  confirmTransaction,
-  prepareTransaction,
-  submitSignedTransaction,
+  signAndSubmit,
   translateContractError,
 } from "@/lib/soroban";
 import { downloadComplianceReceipt } from "@/lib/pdf";
@@ -32,24 +29,6 @@ export interface VerifiedFile {
 
 interface AnchorResult {
   timestampIso: string;
-}
-
-/** Signs `unsignedTx` via Freighter, submits it, and waits for confirmation. */
-async function signAndSubmit(
-  unsignedTx: Transaction,
-  signerAddress: string
-): Promise<string> {
-  const preparedTx = await prepareTransaction(unsignedTx);
-  const signResult = await signTransaction(preparedTx.toXDR(), {
-    networkPassphrase: Networks.TESTNET,
-    address: signerAddress,
-  });
-  if (signResult.error) {
-    throw new Error(signResult.error.message);
-  }
-  const txHash = await submitSignedTransaction(signResult.signedTxXdr);
-  await confirmTransaction(txHash);
-  return txHash;
 }
 
 function anchorStatusLabel(
