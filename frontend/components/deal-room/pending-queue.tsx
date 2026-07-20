@@ -2,6 +2,7 @@
 
 import { truncateMiddle } from "@/lib/format";
 import type { Deal } from "@/components/deal-room/deal-room-workspace";
+import { requiredSigsLabel, statusLabel } from "@/components/deal-room/deal-labels";
 
 interface PendingQueueProps {
   deals: Deal[];
@@ -49,8 +50,8 @@ export function PendingQueue({ deals, onSelect }: PendingQueueProps) {
                   {truncateMiddle(deal.hash, 5, 4)}
                 </td>
                 <td className="px-6 py-4">{deal.assetType}</td>
-                <td className="px-6 py-4">{deal.requiredSigs}</td>
-                <td className="px-6 py-4 font-bold">{deal.status}</td>
+                <td className="px-6 py-4">{requiredSigsLabel(deal)}</td>
+                <td className="px-6 py-4 font-bold">{statusLabel(deal)}</td>
               </tr>
             ))
           )}
