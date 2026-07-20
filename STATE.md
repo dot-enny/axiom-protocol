@@ -2127,19 +2127,81 @@ against `CAH3EF2G...`):
    signers unchecked `[ ]` — exactly matching the real on-chain
    `DealState`.
 
+**Session 37 — Fixed the browser-side V2 flows: dashboard solo anchors
+now execute, and Approve works for a real third-party wallet
+(2026-07-20)**
+A real user reported the exact gap Session 36 flagged: a solo (1-of-1)
+dashboard anchor stayed permanently pending, and clicking `[ APPROVE
+DEAL ]` on the Verify Portal "kept failing." Reproduced both live
+against the deployed contract before touching any code.
+
+- **Root cause 1 — the dashboard never finishes a solo anchor.** Task 3
+  (Session 35) only wired auto-execute into the *server-signed*
+  `/api/v1/anchor` route; the dashboard's own client-side, Freighter-
+  signed `propose_deal` call in `verification-workspace.tsx` never
+  chased it with `approve_deal`/`execute_deal`. Fixed by chaining both,
+  each signed by the same connected wallet via Freighter, when
+  `threshold === 1 && signers.length === 1` — three sequential
+  signature prompts (propose, approve, execute) instead of one, since
+  there's no backend key that can sign on the user's behalf (nor
+  should there be). A failure in the approve/execute chase is reported
+  as a `[WARNING]` without discarding the already-confirmed proposal.
+- **Root cause 2 — the Approve button was structurally incapable of
+  working for a real wallet.** It POSTed the connected address to
+  `/api/v1/approve`, which tries to sign `approve_deal` with the
+  *server's* key — but Soroban's `require_auth()` can only ever be
+  satisfied by the address's own signature. This "worked" in Session
+  36's testing purely because the test happened to use the same funded
+  account as both proposer and server key; any genuinely different
+  wallet gets a real `txFailed` auth rejection. Reproduced this exactly
+  with a second, independently funded Testnet keypair before fixing.
+  Fixed by rewriting `verify-panel.tsx`'s approve flow to build, sign
+  (via Freighter, with a `WalletModal`/`pendingApprove` connect gate
+  mirroring the dashboard's own pattern), submit, and confirm
+  `approve_deal` directly with the *connected wallet's own address* as
+  both fee-payer and caller — then re-query and, if the threshold is
+  now met, chase with a client-signed `execute_deal` too. The
+  server-signed `/api/v1/approve` route itself is unchanged and still
+  valid for its actual use case (a headless institutional caller
+  approving as its own registered identity), it's just no longer what
+  the *browser* UI uses.
+- **A third, self-inflicted bug found during verification**: the new
+  `runApprove` originally called `handleVerify(hash)` *after* setting
+  the "Approval recorded" success message — but `handleVerify` resets
+  `approveMessage` to `null` as part of every fresh query, silently
+  wiping the message the instant it was set. The underlying on-chain
+  approval was genuinely succeeding the whole time (confirmed via the
+  real signer count updating correctly); only the confirmation text
+  was swallowed. Fixed by reordering: refresh first, set the message
+  after.
+
+Verified for real end-to-end (Playwright + system Chrome, against a
+live dev server, using the established "debug trigger, verify, revert"
+pattern with two independently funded Testnet keypairs — one being the
+long-used funded account, one a genuinely fresh `Keypair.random()`
+funded via Friendbot for this session, standing in for "a real user's
+own wallet" that is *not* `SERVER_SECRET_KEY`):
+1. Solo dashboard anchor as the fresh wallet — `propose_deal` →
+   `approve_deal` → `execute_deal`, three real signatures, ending in
+   `[SOROBAN] Deal executed. Single-party attestation complete.`; the
+   Verify Portal immediately showed `[ VERIFIED & EXECUTED ]` with the
+   correct signer and a real execution timestamp — no pending state at
+   all.
+2. A 2-of-2 deal proposed from the dashboard (funded account +
+   fresh-wallet counterparty), then approved from the Verify Portal
+   *as the fresh wallet* — confirmed via the real signer checklist
+   flipping to `[X]` for that address and staying `[ ]` for the other,
+   and the "Approval recorded" message now genuinely persisting on
+   screen.
+`tsc --noEmit` passes clean. Skipped a full `next build` this session
+specifically because the dev server was live and actively in use for
+the user's own testing — `next build`/`next dev` share the same
+`.next/` output and running both concurrently risks corrupting the
+live session; the direct Playwright verification above is stronger
+evidence for this fix regardless.
+
 ## Not built yet
 
-- The auto-execute/approve-route auth caveat from Sessions 34/35 still
-  applies even against the live contract: the server-signed routes
-  only satisfy `require_auth()` for an address that happens to equal
-  `SERVER_SECRET_KEY`'s own public key. Session 36's Test 2 above
-  proved partial approval (1 of 2) genuinely works on-chain, but
-  getting that specific deal to full execution would need the *other*
-  two signers' own private keys to sign their own `approve_deal`
-  calls — a real multi-party signing flow (e.g. each party visiting
-  the Verify Portal with their own connected Freighter wallet) rather
-  than the server acting on their behalf, which was never wired in on
-  either the V1 or V2 server routes.
 - `verify_proof`/`ComplianceRecord` is now fully legacy: the retired
   contract (`CCO6FJTO6E6KWHTICBG6AISDJRQ4TELNEWV5FX7TUQCTPVD4RZ2BCAVK`)
   still holds whatever was anchored there before Session 34, but
@@ -2147,10 +2209,11 @@ against `CAH3EF2G...`):
   had `anchor_proof` called against it. `get_deal`/`queryDealState` is
   the only live read path now.
 - The frontend's Deal Room still uses local/mock signer state
-  (Sessions 11/19), not this on-chain escrow — a real multi-party UI
-  flow (each party connecting their own wallet to call `approve_deal`
-  directly, rather than only through the server-signed `/api/v1/approve`
-  route) would most naturally live there.
+  (Sessions 11/19), not this on-chain escrow. The real multi-party
+  approve flow (each party connecting their own wallet and signing
+  `approve_deal` directly) now exists as of Session 37 — but it lives
+  on the Verify Portal, not the Deal Room, which is presumably where a
+  dedicated multi-party UX belongs long-term.
 - `@axiom/sdk` only wraps `anchorDocument` — no `verifyProof` read
   method yet, no test suite, no published npm package (it's a local
   scaffold only), and `mainnet`'s default base URL
