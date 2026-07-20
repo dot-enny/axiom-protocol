@@ -1,12 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
+import { signTransaction } from "@stellar/freighter-api";
+import { Networks, type Transaction } from "@stellar/stellar-sdk";
 import { Button } from "@/components/ui/button";
+import { WalletModal } from "@/components/WalletModal";
 import { AuditTrail } from "@/components/verify/audit-trail";
 import { useWallet } from "@/components/dashboard/wallet-context";
-import { queryDealState, type DealState } from "@/lib/soroban";
+import {
+  buildApproveDealTransaction,
+  buildExecuteDealTransaction,
+  confirmTransaction,
+  prepareTransaction,
+  queryDealState,
+  submitSignedTransaction,
+  translateContractError,
+  type DealState,
+} from "@/lib/soroban";
 import { getRecords } from "@/lib/useLedgerStore";
 
 type QueryState = "idle" | "loading" | "found" | "rejected";
@@ -29,6 +41,24 @@ function findLocalRecord(hash: string): DealState | null {
   };
 }
 
+/** Signs `unsignedTx` via Freighter, submits it, and waits for confirmation. */
+async function signAndSubmit(
+  unsignedTx: Transaction,
+  signerAddress: string
+): Promise<string> {
+  const preparedTx = await prepareTransaction(unsignedTx);
+  const signResult = await signTransaction(preparedTx.toXDR(), {
+    networkPassphrase: Networks.TESTNET,
+    address: signerAddress,
+  });
+  if (signResult.error) {
+    throw new Error(signResult.error.message);
+  }
+  const txHash = await submitSignedTransaction(signResult.signedTxXdr);
+  await confirmTransaction(txHash);
+  return txHash;
+}
+
 export function VerifyPanel() {
   const searchParams = useSearchParams();
   const { address } = useWallet();
@@ -39,6 +69,11 @@ export function VerifyPanel() {
   const [formatWarning, setFormatWarning] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [approveMessage, setApproveMessage] = useState<string | null>(null);
+  const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  // Set when "[ APPROVE DEAL ]" is clicked with no wallet connected yet,
+  // so approval resumes automatically once the modal's connect succeeds,
+  // mirroring the dashboard's own pendingAnchor pattern.
+  const [pendingApprove, setPendingApprove] = useState(false);
   const hasAutoRun = useRef(false);
   const lastQueriedHash = useRef<string | null>(null);
 
@@ -77,48 +112,74 @@ export function VerifyPanel() {
     }
   }
 
-  async function handleApprove() {
-    const hash = lastQueriedHash.current;
-    if (!hash) return;
-
-    const signerAddress =
-      address ?? window.prompt("Enter your Stellar wallet address to approve this deal:");
-    if (!signerAddress) return;
-
+  // Approving is a real on-chain action: it must be signed by the
+  // approver's own wallet, since Soroban's require_auth() can only ever
+  // be satisfied by that address's own signature — there is no server
+  // key that can sign on a third party's behalf. Every step here mirrors
+  // the dashboard's own propose_deal flow for that reason.
+  const runApprove = useCallback(async (signerAddress: string, hash: string) => {
     setIsApproving(true);
     setApproveMessage(null);
 
     try {
-      const response = await fetch("/api/v1/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hash, signerAddress }),
-      });
-      const body: unknown = await response.json().catch(() => undefined);
+      const approveUnsigned = await buildApproveDealTransaction(
+        signerAddress,
+        hash
+      );
+      await signAndSubmit(approveUnsigned, signerAddress);
 
-      if (!response.ok) {
-        const message =
-          body && typeof body === "object" && "error" in body
-            ? String((body as { error: unknown }).error)
-            : `Request failed with status ${response.status}`;
-        setApproveMessage(`[ERROR] ${message}`);
-        return;
+      const deal = await queryDealState(hash);
+      let executed = false;
+      if (deal && deal.executedAt === 0 && deal.approvals.length >= deal.threshold) {
+        const executeUnsigned = await buildExecuteDealTransaction(
+          signerAddress,
+          hash
+        );
+        await signAndSubmit(executeUnsigned, signerAddress);
+        executed = true;
       }
 
+      // handleVerify resets approveMessage as part of a fresh query, so
+      // it must run before this success message is set, not after —
+      // otherwise the message is wiped the instant it's shown.
+      await handleVerify(hash);
       setApproveMessage(
-        (body as { executed?: boolean }).executed
+        executed
           ? "[SOROBAN] Approval recorded — threshold met, deal executed."
           : "[SOROBAN] Approval recorded. Awaiting further signatures."
       );
-      await handleVerify(hash);
     } catch (err) {
+      const translated = translateContractError(err);
       setApproveMessage(
-        `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
+        translated ??
+          `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
       );
     } finally {
       setIsApproving(false);
     }
+  }, []);
+
+  function handleApproveClick() {
+    const hash = lastQueriedHash.current;
+    if (!hash || isApproving) return;
+
+    if (!address) {
+      setPendingApprove(true);
+      setIsWalletModalOpen(true);
+      return;
+    }
+
+    void runApprove(address, hash);
   }
+
+  // The wallet modal closes itself on a successful connection — once
+  // that happens, resume the approval the user actually asked for.
+  useEffect(() => {
+    const hash = lastQueriedHash.current;
+    if (!pendingApprove || !address || !hash) return;
+    setPendingApprove(false);
+    void runApprove(address, hash);
+  }, [pendingApprove, address, runApprove]);
 
   // Deep-link support: ?hash=... populates and auto-queries on first mount only,
   // so it doesn't re-fire if the user edits the input afterward.
@@ -234,12 +295,21 @@ export function VerifyPanel() {
               </ul>
             </div>
 
+            <p className="mt-4 font-mono text-xs uppercase tracking-widest">
+              Approving requires your own connected wallet — only your own
+              signature can authorize your approval on-chain.
+            </p>
+
             <Button
-              onClick={handleApprove}
+              onClick={handleApproveClick}
               disabled={isApproving}
-              className="mt-6 w-full py-5 text-sm"
+              className="mt-4 w-full py-5 text-sm"
             >
-              {isApproving ? "Submitting Approval..." : "[ APPROVE DEAL ]"}
+              {isApproving
+                ? "Submitting Approval..."
+                : address
+                  ? "[ APPROVE DEAL ]"
+                  : "[ CONNECT WALLET TO APPROVE ]"}
             </Button>
 
             {approveMessage && (
@@ -263,6 +333,14 @@ export function VerifyPanel() {
           </div>
         )}
       </div>
+
+      <WalletModal
+        isOpen={isWalletModalOpen}
+        onClose={() => {
+          setIsWalletModalOpen(false);
+          if (!address) setPendingApprove(false);
+        }}
+      />
     </div>
   );
 }
