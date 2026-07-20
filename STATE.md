@@ -2200,6 +2200,123 @@ the user's own testing — `next build`/`next dev` share the same
 live session; the direct Playwright verification above is stronger
 evidence for this fix regardless.
 
+**Session 38 — Deal Room rewired to real on-chain `DealState` (2026-07-20)**
+The Deal Room was the last major surface still faking its core
+interaction: fabricated `auditor`/`counterparty` addresses
+(`generateMockStellarKey`, a deterministic PRNG, not real keys),
+a hardcoded `"2/3"`/`"3/3"` required-signatures string ignoring the
+real `threshold`, and a `setTimeout(1200ms)`-based fake
+`handleExecute()` with zero contract calls. Rewired to the same real,
+Freighter-signed primitives already proven twice (Sessions 34/37) —
+this was a porting job, not new invention.
+
+- **Extracted the duplicated `signAndSubmit` helper into
+  `frontend/lib/soroban.ts`** as a proper shared export — it was
+  copy-pasted verbatim in `verification-workspace.tsx` and
+  `verify-panel.tsx`; a Deal Room copy would have been a third
+  duplicate. Both call sites now import it instead, with their
+  now-unused `signTransaction`/`Networks`/`Transaction` imports
+  removed. No behavior change at either site.
+- **New `frontend/lib/useDealStates.ts`** — fetches real `DealState`
+  for every hash in the local ledger in parallel (`Promise.all`),
+  refetching on mount and whenever the ledger's hash *set* changes (not
+  on every re-render), with an `epoch` guard so a slower superseded
+  batch can never overwrite fresher results. Exposes `refresh(hash)` to
+  re-query a single row after an action or on re-entering its detail
+  view. Distinguishes `"not-found"` (real `get_deal`, never proposed)
+  from `"error"` (genuine RPC/network fault) as two separate statuses
+  — `queryDealState` already made this distinction internally, this
+  just preserves it through to the UI.
+- **`deal-room-workspace.tsx` rewritten**: the `Deal` type is now built
+  entirely from real data — `queryStatus`/`dealState`/`queryError`
+  from `useDealStates`, `hash`/`issuer` from the local `AnchorRecord`.
+  `generateMockStellarKey` and the local `signedIds: Set<string>` are
+  gone; signedness is always read from `dealState.approvals`.
+  `handleExecute` is now a real `runApprove`: builds + `signAndSubmit`s
+  a live `approve_deal`, re-queries, and — if the threshold is now
+  met — chases with a real `execute_deal` too, gated behind the same
+  `WalletModal`/pending-action-resume pattern already used on the
+  Dashboard and Verify Portal. Refresh runs *before* the success log
+  line is appended, not after — repeating that ordering discipline
+  from the bug fixed in Session 37 (a refresh that resets state must
+  never be allowed to run after, and wipe, a message that was just
+  set).
+- **New `frontend/components/deal-room/deal-labels.ts`** — small pure
+  module (`requiredSigsLabel`/`statusLabel`) shared by the queue and
+  detail views so the status-derivation logic isn't duplicated.
+- **`execution-detail.tsx` rewritten**: the fixed "Party 1 (Issuer) /
+  Party 2 (Auditor) / Party 3 (Counterparty)" structure is gone,
+  replaced with one `SignatureRow` per *real* `dealState.signers[i]`
+  (generalizes to any 1-3, not a fixed 3; `signature-row.tsx` itself
+  needed zero changes — already fully generic). A new
+  `getButtonState()` pre-checks `dealState.signers.includes(connectedAddress)`
+  and disables the button with `"[ NOT AN AUTHORIZED SIGNER ]"` *before*
+  ever attempting a transaction, rather than only discovering the
+  contract's real `Unauthorized` panic after a failed round-trip —
+  also handles not-connected, already-executed, and
+  already-signed-by-this-wallet states explicitly. Distinct panels for
+  `"loading"`/`"not-found"`/`"error"` query states so a `null`
+  `dealState` never reaches the signature-row rendering path.
+- **Deleted `frontend/lib/keys.ts`** (`generateMockStellarKey`) —
+  confirmed via grep it had exactly one caller, now gone.
+
+**Verified for real end-to-end against the live contract**
+(`CAH3EF2G...`), via the established "debug trigger, verify, revert"
+pattern — this time needing only two temporary hooks total (one
+`__debugConnect` in `wallet-context.tsx`, one `__debugSignerSecret`
+branch inside `soroban.ts`'s now-shared `signAndSubmit`), both fully
+reverted afterward (confirmed zero diff on `wallet-context.tsx`, zero
+`grep` hits for either hook name):
+1. Proposed a real 2-of-2 deal from the Dashboard (Signer A + a second
+   independently funded keypair, Signer B, as counterparty). The Deal
+   Room queue correctly showed `0/2`, `Action Required`; the detail
+   view showed exactly 2 real signer rows (not mock keys), both
+   unsigned.
+2. Approved as Signer A — real `approve_deal` confirmed, queue and
+   detail both flipped to `1/2`, Signer A's row showed `[✓ SIGNED]`.
+3. Switched to Signer B, re-entered the same deal — the refetch
+   correctly showed B unsigned, A signed, button still enabled for B.
+4. Approved as Signer B — real `approve_deal` **and** the auto-chased
+   `execute_deal` both confirmed, status flipped to `Executed`, button
+   became disabled `"[ ESCROW LOCKED & ANCHORED ]"`.
+5. Connected as a third, unrelated wallet on a separate, still-pending
+   2-of-2 deal — confirmed the button rendered disabled as
+   `"[ NOT AN AUTHORIZED SIGNER ]"` and no transaction was ever
+   attempted.
+6. Seeded `localStorage` with a fabricated `AnchorRecord` whose hash
+   was never proposed — confirmed the queue showed `—`/`No On-Chain
+   Record` and the detail view rendered the not-found panel without
+   crashing on a `null` `dealState`.
+
+`tsc --noEmit` passes clean. Skipped a full `next build` for the same
+reason as Session 37 — the dev server was live and actively in use;
+the direct Playwright verification above is stronger evidence anyway.
+
+**Also produced during this session's investigation (not acted on —
+explicitly scoped out by the user in favor of Deal Room only)**: an
+audit of every other still-mocked surface in the app, for a future
+session to pick up:
+- The Developer Portal's "Generate API Key" button
+  (`developers/api-credentials.tsx`) produces a cosmetic
+  client-side-random string never registered with or verified by the
+  server — matches the existing "no real per-key auth" bullet below,
+  but implementing it for real means introducing a persistence layer
+  this project has never had (no database of any kind exists today).
+- The Developer Portal's "Infrastructure Status" panel
+  (`developers/infrastructure-status.tsx`) — rate-limit tier, usage
+  bar, and webhooks — is 100% static/decorative with no feature behind
+  it at all (a permanently-empty `w-0` usage bar, a permanently-disabled
+  "Add Webhook" button). Bigger scope than a wiring fix — real rate
+  limiting and webhook delivery are both new infrastructure.
+- `developers/api-docs.tsx`'s example response copy still says "the
+  same `anchor_proof` invocation" — stale relative to the real route,
+  which calls `propose_deal` as of Session 34. Trivial one-line fix,
+  just never prioritized over Deal Room.
+- The SDK (`@axiom/sdk`) still has no `verifyProof`/`queryDeal` read
+  method — matches the existing SDK bullet below, would need a new
+  read-only API route wrapping `queryDealState` since the SDK is a
+  pure REST client with no direct Soroban access of its own.
+
 ## Not built yet
 
 - `verify_proof`/`ComplianceRecord` is now fully legacy: the retired
@@ -2208,12 +2325,6 @@ evidence for this fix regardless.
   nothing in the app points at it anymore, and the live contract never
   had `anchor_proof` called against it. `get_deal`/`queryDealState` is
   the only live read path now.
-- The frontend's Deal Room still uses local/mock signer state
-  (Sessions 11/19), not this on-chain escrow. The real multi-party
-  approve flow (each party connecting their own wallet and signing
-  `approve_deal` directly) now exists as of Session 37 — but it lives
-  on the Verify Portal, not the Deal Room, which is presumably where a
-  dedicated multi-party UX belongs long-term.
 - `@axiom/sdk` only wraps `anchorDocument` — no `verifyProof` read
   method yet, no test suite, no published npm package (it's a local
   scaffold only), and `mainnet`'s default base URL
