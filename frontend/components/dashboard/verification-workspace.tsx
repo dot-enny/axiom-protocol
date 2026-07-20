@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { signTransaction } from "@stellar/freighter-api";
-import { Networks, StrKey } from "@stellar/stellar-sdk";
+import { Networks, StrKey, type Transaction } from "@stellar/stellar-sdk";
 import { AnchorConfig } from "@/components/dashboard/anchor-config";
 import { Dropzone } from "@/components/dashboard/dropzone";
 import { TerminalConsole } from "@/components/dashboard/terminal-console";
@@ -11,6 +11,8 @@ import { WalletModal } from "@/components/WalletModal";
 import { useWallet } from "@/components/dashboard/wallet-context";
 import { sha256Hex } from "@/lib/hash";
 import {
+  buildApproveDealTransaction,
+  buildExecuteDealTransaction,
   buildProposeDealTransaction,
   confirmTransaction,
   prepareTransaction,
@@ -30,6 +32,24 @@ export interface VerifiedFile {
 
 interface AnchorResult {
   timestampIso: string;
+}
+
+/** Signs `unsignedTx` via Freighter, submits it, and waits for confirmation. */
+async function signAndSubmit(
+  unsignedTx: Transaction,
+  signerAddress: string
+): Promise<string> {
+  const preparedTx = await prepareTransaction(unsignedTx);
+  const signResult = await signTransaction(preparedTx.toXDR(), {
+    networkPassphrase: Networks.TESTNET,
+    address: signerAddress,
+  });
+  if (signResult.error) {
+    throw new Error(signResult.error.message);
+  }
+  const txHash = await submitSignedTransaction(signResult.signedTxXdr);
+  await confirmTransaction(txHash);
+  return txHash;
 }
 
 function anchorStatusLabel(
@@ -161,22 +181,51 @@ export function VerificationWorkspace() {
           signers,
           threshold
         );
-        const preparedTx = await prepareTransaction(unsignedTx);
 
         appendLine("[NETWORK] Requesting Freighter signature...");
-        const signResult = await signTransaction(preparedTx.toXDR(), {
-          networkPassphrase: Networks.TESTNET,
-          address: issuerAddress,
-        });
-        if (signResult.error) {
-          throw new Error(signResult.error.message);
+        appendLine("[NETWORK] Submitting to Stellar Testnet...");
+        const txHash = await signAndSubmit(unsignedTx, issuerAddress);
+
+        appendLine("[SOROBAN] Deal proposed on-chain.");
+
+        // A solo (1-of-1) self-attestation has no one else to wait
+        // on — chase the proposal with this same wallet's approval and
+        // execution so it doesn't sit permanently pending. Each step
+        // needs its own Freighter signature (there's no backend key to
+        // sign on the user's behalf, nor should there be — only the
+        // user's own signature can satisfy their own `require_auth()`).
+        // A failure here is reported without discarding the
+        // already-confirmed proposal below.
+        if (threshold === 1 && signers.length === 1) {
+          try {
+            appendLine("[NETWORK] Requesting Freighter signature for approval...");
+            const approveUnsigned = await buildApproveDealTransaction(
+              issuerAddress,
+              targetFile.hash
+            );
+            await signAndSubmit(approveUnsigned, issuerAddress);
+
+            appendLine("[NETWORK] Requesting Freighter signature for execution...");
+            const executeUnsigned = await buildExecuteDealTransaction(
+              issuerAddress,
+              targetFile.hash
+            );
+            await signAndSubmit(executeUnsigned, issuerAddress);
+
+            appendLine("[SOROBAN] Deal executed. Single-party attestation complete.");
+          } catch (chaseErr) {
+            const translated = translateContractError(chaseErr);
+            const message =
+              translated ??
+              `[WARNING] Deal proposed, but auto-execution failed: ${
+                chaseErr instanceof Error ? chaseErr.message : "Unknown error"
+              }`;
+            appendLine(message);
+          }
+        } else {
+          appendLine("[SOROBAN] Awaiting required approvals.");
         }
 
-        appendLine("[NETWORK] Submitting to Stellar Testnet...");
-        const txHash = await submitSignedTransaction(signResult.signedTxXdr);
-        await confirmTransaction(txHash);
-
-        appendLine("[SOROBAN] Deal proposed on-chain. Awaiting required approvals.");
         addRecord({
           filename: targetFile.name,
           hash: targetFile.hash,
